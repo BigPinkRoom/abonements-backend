@@ -15,5 +15,15 @@
   "bugs": {
     "url": "https://github.com/BigPinkRoom/abonements-backend/issues"
   },
-  "homepage": "https://github.com/BigPinkRoom/abonements-backend#readme"
+  "homepage": "https://github.com/BigPinkRoom/abonements-backend#readme",
+  "dependencies": {
+    "bcrypt": "^5.0.1",
+    "escape-html": "^1.0.3",
+    "express": "^4.17.1",
+    "express-session": "^1.17.2",
+    "joi": "^17.4.1",
+    "mysql2": "^2.2.5",
+    "passport": "^0.4.1",
+    "passport-local": "^1.0.0"
+  }
 }
