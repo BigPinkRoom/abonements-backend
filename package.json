@@ -19,6 +19,8 @@
   "homepage": "https://github.com/BigPinkRoom/abonements-backend#readme",
   "dependencies": {
     "bcrypt": "^5.0.1",
+    "cors": "^2.8.5",
+    "dotenv": "^10.0.0",
     "escape-html": "^1.0.3",
     "express": "^4.17.1",
     "express-session": "^1.17.2",

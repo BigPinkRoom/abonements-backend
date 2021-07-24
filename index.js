@@ -1,8 +1,16 @@
 const express = require('express');
+const cors = require('cors');
 const morgan = require('morgan');
 const app = express();
 
 app.use(morgan('dev'));
+require('dotenv').config();
+
+const corsOptions = {
+  origin: 'http://localhost:3000',
+  optionsSuccessStatus: 200,
+};
+app.use(cors(corsOptions));
 
 const session = require('express-session');
 const passport = require('passport');
@@ -15,8 +23,6 @@ require('./configs/passport.config')(passport);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-console.log(process.env);
 
 app.use(
   session({
