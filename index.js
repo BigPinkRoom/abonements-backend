@@ -1,5 +1,8 @@
 const express = require('express');
+const morgan = require('morgan');
 const app = express();
+
+app.use(morgan('dev'));
 
 const session = require('express-session');
 const passport = require('passport');
