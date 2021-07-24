@@ -1,10 +1,13 @@
 const express = require('express');
+const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
 const app = express();
 
 app.use(morgan('dev'));
 require('dotenv').config();
+
+app.use(helmet());
 
 const corsOptions = {
   origin: 'http://localhost:3000',
