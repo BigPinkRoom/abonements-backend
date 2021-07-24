@@ -6,7 +6,6 @@ app.use(morgan('dev'));
 
 const session = require('express-session');
 const passport = require('passport');
-const flash = require('connect-flash');
 
 require('./pool.db').getPool();
 
@@ -16,6 +15,8 @@ require('./configs/passport.config')(passport);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+console.log(process.env);
 
 app.use(
   session({
@@ -32,7 +33,6 @@ app.use(
 
 app.use(passport.initialize());
 app.use(passport.session());
-app.use(flash());
 
 app.use('/api/v1/signup', users.api.signup);
 app.use('/api/v1/logout', users.api.logout);
@@ -44,7 +44,7 @@ app.use('/api/v1/logout', users.api.logout);
 module.exports = app;
 
 if (require.main === module) {
-  const port = process.env.PORT || 3001;
+  const port = process.env.PORT || 4000;
   app.listen(port, () => {
     console.log(`API server listening on port ${port}`);
   });
