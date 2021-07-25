@@ -3,6 +3,9 @@ const escapeHtml = require('escape-html');
 const { isExist } = require('./usersDAL');
 const User = require('./user');
 
+const patternPassword = '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])(?=.{8,32})';
+const patternName = '^[a-zA-Zа-яА-Я]{2,100}$'; //TODO
+
 class UserValidation {
   userMiddleware(schema, property) {
     return async (req, res, next) => {
@@ -29,9 +32,6 @@ class UserValidation {
   }
 
   userAddSchema() {
-    const patternPassword = '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])(?=.{8,32})';
-    const patternName = '^[a-zA-Zа-яА-Я]{2,100}$'; //TODO
-
     const schema = Joi.object({
       email: Joi.string().email().required(),
       password: Joi.string()
@@ -46,12 +46,17 @@ class UserValidation {
         .valid(Joi.ref('password'))
         .required()
         .error(new Error('Field "password" and field "confirm password must match ')),
-      name: Joi.string().pattern(RegExp(patternName)).error(new Error('Field "name" must be contain at least 2 and at max 100 letters')),
+      name: Joi.string()
+        .pattern(RegExp(patternName))
+        .required()
+        .error(new Error('Field "name" must be contain at least 2 and at max 100 letters')),
       surname: Joi.string()
         .pattern(RegExp(patternName))
+        .required()
         .error(new Error('Field "surname" must be contain at least 2 and at max 100 letters')),
       patronymic: Joi.string()
         .pattern(RegExp(patternName))
+        .required()
         .error(new Error('Field "patronymic" must be contain at least 2 and at max 100 letters')),
     });
 
@@ -64,10 +69,23 @@ class UserValidation {
     // };
   }
 
-  userUpdateSchema(rawData) {
-    const patternPassword = '/(?=.*[a-z])(?=.*[A-Z])(?=.*d)(?=.*[$@$!#.])[A-Za-zd$@$!%*?&.]{8,20}/';
-    const patternName = '^[a-zA-Zа-яА-Я]{2,100}$';
+  userLoginSchema() {
+    const schema = Joi.object({
+      email: Joi.string().email().required(),
+      password: Joi.string()
+        .pattern(RegExp(patternPassword))
+        .required()
+        .error(
+          new Error(
+            'Field "password" must be contain at least 8 and at max 32 symbols. At least one digit, one uppercase (latin), one lowercase (latin) and one of symbols("!@#$%^&*")'
+          )
+        ),
+    });
 
+    return schema;
+  }
+
+  userUpdateSchema() {
     const schema = Joi.object({
       email: Joi.string().email().required().optional,
       password: Joi.string().pattern(new RegExp(patternPassword)).required().optional,
