@@ -25,6 +25,7 @@
     "express": "^4.17.1",
     "express-session": "^1.17.2",
     "helmet": "^4.6.0",
+    "http-errors": "^1.8.0",
     "joi": "^17.4.1",
     "morgan": "^1.10.0",
     "mysql2": "^2.2.5",
@@ -33,5 +34,10 @@
   },
   "devDependencies": {
     "nodemon": "^2.0.12"
+  },
+  "prettier": {
+    "printWidth": 120,
+    "singleQuote": true,
+    "endOfLine": "auto"
   }
 }
