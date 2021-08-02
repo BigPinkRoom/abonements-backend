@@ -1,14 +1,19 @@
 const pool = require('../../pool.db').getPool();
 const bcrypt = require('bcrypt');
 
+const saltRounds = 10;
+
 class UsersModel {
-  async add({ email, password }) {
+  async add({ email, password, surname, name, patronymic }) {
     const sql = 'SELECT add_user(?, ?, 0, ?, ?, ?, NULL) AS userId';
-    const params = [password, email, 'passwordConfirm', 'passwordConfirm', 'passwordConfirm'];
     let poolPromise = null;
 
     try {
       poolPromise = pool.promise();
+
+      const passwordHashed = await bcrypt.hash(password, saltRounds);
+      const params = [email, passwordHashed, surname, name, patronymic];
+
       const [rows, fields, error] = await poolPromise.execute(sql, params);
 
       const userId = rows[0].userId;
@@ -46,7 +51,27 @@ class UsersModel {
     }
   }
 
-  async getUser(userId) {
+  async getUserByEmail(email) {
+    const sql = 'SELECT * FROM `users` where `email` = ?';
+    let poolPromise = null;
+
+    let params = [email];
+
+    try {
+      poolPromise = pool.promise();
+      const [rows, fields, error] = await poolPromise.execute(sql, params);
+
+      if (error) throw error;
+
+      return rows[0];
+    } catch (error) {
+      throw error;
+    } finally {
+      pool.releaseConnection(poolPromise);
+    }
+  }
+
+  async getUserById(userId) {
     const sql = 'SELECT * FROM `users` where `users_id` = ?';
     let poolPromise = null;
 
@@ -56,7 +81,6 @@ class UsersModel {
       poolPromise = pool.promise();
       const [rows, fields, error] = await poolPromise.execute(sql, params);
 
-      console.log('user get', rows);
       if (error) throw error;
 
       return rows[0];
