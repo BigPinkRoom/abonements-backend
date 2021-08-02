@@ -3,6 +3,12 @@ const router = Router();
 const controller = require('./usersController');
 const validation = require('./usersValidation');
 
-exports.signup = router.post('/', validation.userMiddleware(validation.userAddSchema()), controller.add);
+router.post('/signup', validation.userMiddleware(validation.userAddSchema(), (checkExistEmail = true)), controller.add);
 
-exports.logout = router.get('/', controller.logout);
+router.post('/login', validation.userMiddleware(validation.userLoginSchema()), controller.login);
+
+router.delete('/logout', controller.isAuthenticated, controller.logout);
+
+router.get('/user', controller.isAuthenticated, controller.getAuthUser);
+
+module.exports = router;
