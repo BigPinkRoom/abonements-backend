@@ -12,13 +12,19 @@ app.use(helmet());
 const corsOptions = {
   origin: 'http://localhost:3000',
   optionsSuccessStatus: 200,
+  credentials: true,
 };
 app.use(cors(corsOptions));
 
 const session = require('express-session');
 const passport = require('passport');
 
-require('./pool.db').getPool();
+const pool = require('./pool.db').getPool();
+
+const sessionStoreConfig = require('./configs/db.sessionStore.config');
+const MySQLStore = require('express-mysql-session')(session);
+// const sessionStore = new MySQLStore({}, pool);
+const sessionStore = new MySQLStore(sessionStoreConfig);
 
 const users = require('./components/users');
 
@@ -27,14 +33,17 @@ require('./configs/passport.config')(passport);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const { DateTime } = require('luxon');
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
+    name: 'id',
     cookie: {
-      path: '/',
       httpOnly: true,
-      maxAge: 60 * 60 * 1000,
+      maxAge: DateTime.now().endOf('day') - DateTime.now().toMillis(),
     },
+    store: sessionStore,
     resave: false,
     saveUninitialized: false,
   })
@@ -43,12 +52,11 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-app.use('/api/v1/signup', users.api.signup);
-app.use('/api/v1/logout', users.api.logout);
+app.use('/api/v1/auth', users.api);
 
-// app.use(function (req, res, next) {
-//   res.status(404).send('Not found');
-// });
+app.use(function (req, res, next) {
+  res.status(404).send('Not found');
+});
 
 module.exports = app;
 
