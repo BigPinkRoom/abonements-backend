@@ -3,11 +3,11 @@ const escapeHtml = require('escape-html');
 const { isExist } = require('./usersDAL');
 const User = require('./user');
 
-const patternPassword = '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])(?=.{8,32})';
+const patternPassword = '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])(?=.{8,500})';
 const patternName = '^[a-zA-Zа-яА-Я]{2,100}$'; //TODO
 
 class UserValidation {
-  userMiddleware(schema, property) {
+  userMiddleware(schema, checkExistEmail = false) {
     return async (req, res, next) => {
       try {
         const user = new User(req.body);
@@ -15,7 +15,10 @@ class UserValidation {
         await schema.validateAsync(user);
 
         const email = user.email;
-        await isExist(email);
+
+        if (checkExistEmail) {
+          await isExist(email);
+        }
 
         next();
       } catch (error) {
@@ -39,21 +42,21 @@ class UserValidation {
         .required()
         .error(
           new Error(
-            'Field "password" must be contain at least 8 and at max 32 symbols. At least one digit, one uppercase (latin), one lowercase (latin) and one of symbols("!@#$%^&*")'
+            'Field "password" must be contain at least 8 symbols. At least one digit, one uppercase (latin), one lowercase (latin) and one of symbols("!@#$%^&*")'
           )
         ),
       passwordConfirm: Joi.string()
         .valid(Joi.ref('password'))
         .required()
-        .error(new Error('Field "password" and field "confirm password must match ')),
-      name: Joi.string()
-        .pattern(RegExp(patternName))
-        .required()
-        .error(new Error('Field "name" must be contain at least 2 and at max 100 letters')),
+        .error(new Error('Field "password" and field "confirm password" must match ')),
       surname: Joi.string()
         .pattern(RegExp(patternName))
         .required()
         .error(new Error('Field "surname" must be contain at least 2 and at max 100 letters')),
+      name: Joi.string()
+        .pattern(RegExp(patternName))
+        .required()
+        .error(new Error('Field "name" must be contain at least 2 and at max 100 letters')),
       patronymic: Joi.string()
         .pattern(RegExp(patternName))
         .required()
@@ -77,7 +80,7 @@ class UserValidation {
         .required()
         .error(
           new Error(
-            'Field "password" must be contain at least 8 and at max 32 symbols. At least one digit, one uppercase (latin), one lowercase (latin) and one of symbols("!@#$%^&*")'
+            'Field "password" must be contain at least 8 symbols. At least one digit, one uppercase (latin), one lowercase (latin) and one of symbols("!@#$%^&*")'
           )
         ),
     });
