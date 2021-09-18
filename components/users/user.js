@@ -1,5 +1,6 @@
 const escapeHtml = require('escape-html');
 
+// TODO
 class User {
   constructor(userParams) {
     for (let paramName in userParams) {
