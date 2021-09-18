@@ -5,7 +5,7 @@ const saltRounds = 10;
 
 class UsersModel {
   async add({ email, password, surname, name, patronymic }) {
-    const sql = 'SELECT add_user(?, ?, 0, ?, ?, ?, NULL) AS userId';
+    const sql = 'SELECT add_user(?, ?, 0, ?, ?, ?, NULL) AS userId;';
     let poolPromise = null;
 
     try {
@@ -31,7 +31,7 @@ class UsersModel {
   }
 
   async isExist(email) {
-    const sql = 'SELECT EXISTS(SELECT users_id FROM mydb.users WHERE email = ? LIMIT 1) AS value ';
+    const sql = 'SELECT EXISTS(SELECT user_id FROM mydb.users WHERE email = ? LIMIT 1) AS value;';
     const params = [email];
     let poolPromise = null;
 
@@ -52,7 +52,8 @@ class UsersModel {
   }
 
   async getUserByEmail(email) {
-    const sql = 'SELECT * FROM `users` where `email` = ?';
+    const sql =
+      'SELECT users.*, roles.name AS `role_name` FROM users LEFT JOIN `roles` ON users.role_id = roles.role_id WHERE users.email = ?;';
     let poolPromise = null;
 
     let params = [email];
@@ -65,6 +66,7 @@ class UsersModel {
 
       return rows[0];
     } catch (error) {
+      console.log('error get user by email');
       throw error;
     } finally {
       pool.releaseConnection(poolPromise);
@@ -72,7 +74,8 @@ class UsersModel {
   }
 
   async getUserById(userId) {
-    const sql = 'SELECT * FROM `users` where `users_id` = ?';
+    const sql =
+      'SELECT users.*, roles.name AS `role_name` FROM users LEFT JOIN `roles` ON users.role_id = roles.role_id WHERE users.user_id = ?';
     let poolPromise = null;
 
     let params = [userId];
@@ -85,11 +88,33 @@ class UsersModel {
 
       return rows[0];
     } catch (error) {
+      console.log('error get user by id');
       throw error;
     } finally {
       pool.releaseConnection(poolPromise);
     }
   }
+
+  // TODO delete
+  // async getUserRole(roleId) {
+  //   const sql = 'SELECT * FROM `roles` WHERE `role_id` = ?';
+  //   let poolPromise = null;
+
+  //   let params = [roleId];
+
+  //   try {
+  //     poolPromise = pool.promise();
+  //     const [rows, fields, error] = await poolPromise.execute(sql, params);
+
+  //     if (error) throw error;
+
+  //     return rows[0];
+  //   } catch (error) {
+  //     throw error;
+  //   } finally {
+  //     pool.releaseConnection(poolPromise);
+  //   }
+  // }
 }
 
 module.exports = new UsersModel();

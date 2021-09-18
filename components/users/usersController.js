@@ -1,7 +1,6 @@
 const model = require('./usersDAL');
 const service = require('./usersService');
 const passport = require('passport');
-// require('../../configs/passport.config')(passport);
 
 class UsersController {
   async add(req, res, next) {
@@ -25,10 +24,10 @@ class UsersController {
         if (!user) {
           res.status(400).json({ error: { message: info } });
         } else {
-          // req.session.touch();
+          req.session.touch();
+
           req.login(user, function (err) {
-            res.status(200).json(user);
-            next();
+            res.status(200).json({ message: 'Login succusseful' });
           });
         }
       })(req, res, next);
@@ -56,8 +55,10 @@ class UsersController {
   async logout(req, res) {
     try {
       req.logout();
+
       res.clearCookie('id');
       req.session.destroy();
+
       res.status(200).json('Succussefully logged out');
     } catch (error) {
       console.log('controller logout error', error);
@@ -67,20 +68,50 @@ class UsersController {
     }
   }
 
-  async isAuthenticated(req, res, next) {
+  checkAccess(rolesArray) {
+    return async (req, res, next) => {
+      try {
+        if (req.isAuthenticated()) {
+          if (!service.checkUserRole(req.user.user_role, rolesArray)) {
+            res.status(403).json({ error: { message: 'Forbidden' } });
+          }
+
+          next();
+        } else {
+          res.status(401).json({ error: { message: 'User is not authenticated' } });
+          // return new Error({ error: { message: 'User is not authenticated' } });
+        }
+      } catch (error) {
+        res.status(500).json({ error: { message: error } });
+        next(error);
+      }
+    };
+  }
+
+  // TODO delete
+  // async isAuthenticated(req, res, next) {
+  //   try {
+  //     if (req.isAuthenticated()) {
+  //       next();
+  //     } else {
+  //       res.status(401).json({ error: { message: 'User is not authenticated' } });
+  //       // return new Error({ error: { message: 'User is not authenticated' } });
+  //     }
+  //   } catch (error) {
+  //     res.status(500).json({ error: { message: error } });
+  //     next(error);
+  //   }
+  // }
+
+  async isNotAuthenticated(req, res, next) {
     try {
-      console.log('is authenticated start', req.user);
-      if (req.isAuthenticated()) {
-        console.log('auth success');
-        return next();
+      if (!req.isAuthenticated()) {
+        next();
       } else {
-        console.log('auth error');
-        res.status(401).json({ error: { message: 'User is not authenticated' } });
-        return new Error({ error: { message: 'User is not authenticated' } });
+        res.status(401).json({ error: { message: 'User must be in not authenticated' } });
+        // return new Error({ error: { message: 'User must be in not authenticated' } });
       }
     } catch (error) {
-      console.log('controller is authenticated error', error);
-
       res.status(500).json({ error: { message: error } });
       next(error);
     }

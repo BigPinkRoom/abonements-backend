@@ -1,27 +1,24 @@
 const LocalStrategy = require('passport-local').Strategy;
 const User = require('../components/users/user');
 const service = require('../components/users/usersService');
-const userDal = require('../components/users/usersDAL');
+const usersDal = require('../components/users/usersDAL');
 const bcrypt = require('bcrypt');
 // const escapeHtml = require('escape-html');
 
 module.exports = function (passport) {
   passport.serializeUser(function (user, done) {
-    console.log('serialize', user);
-
     done(null, user.user_id);
   });
 
-  passport.deserializeUser(async function (id, done) {
+  passport.deserializeUser(async function (userId, done) {
     try {
-      console.log('start serialize');
-      const user = await userDal.getUserById(id);
-
-      console.log('de seiralize', user);
+      const user = await usersDal.getUserById(userId);
 
       if (!user) done(new Error('User not found'));
 
-      done(null, user);
+      const safeUser = service.createSafeUser(user);
+
+      done(null, safeUser);
     } catch (error) {
       done(error);
     }
@@ -38,8 +35,8 @@ module.exports = function (passport) {
       async function (req, email, password, done) {
         const user = new User(req.body);
 
-        const userId = await userDal.add(user);
-        user.users_id = userId;
+        const userId = await usersDal.add(user);
+        user.user_id = userId;
 
         try {
           return done(null, user);
@@ -59,25 +56,27 @@ module.exports = function (passport) {
       },
       async function (req, email, password, done) {
         try {
-          const user = await userDal.getUserByEmail(email);
+          const user = await usersDal.getUserByEmail(email);
 
           if (!user) {
-            return done(null, false, `User with email ${email} was not found`);
+            return done(null, false, { message: `User with email ${email} was not found` });
+
+            // TODO delete
             // return done(null, false, createError(401, `User with email ${email} was not found`));
           }
 
           const userHash = user.password;
-
           const match = await bcrypt.compare(password, userHash);
+
+          if (!match) {
+            return done(null, false, { message: 'Not a matching password' });
+          }
 
           const safeUser = service.createSafeUser(user);
 
-          if (!match) {
-            return done(null, false, 'Not a matching password');
-          }
-
           return done(null, safeUser);
         } catch (error) {
+          console.log('passport error login', error);
           return done(error);
         }
       }
