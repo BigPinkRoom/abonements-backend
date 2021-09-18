@@ -5,6 +5,7 @@ const dbConfig = {
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   createDatabaseTable: true,
+  clearExpired: true,
 };
 
 module.exports = dbConfig;
