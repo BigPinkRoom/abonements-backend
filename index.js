@@ -19,14 +19,14 @@ app.use(cors(corsOptions));
 const session = require('express-session');
 const passport = require('passport');
 
-const pool = require('./pool.db').getPool();
+require('./pool.db').getPool();
 
 const sessionStoreConfig = require('./configs/db.sessionStore.config');
 const MySQLStore = require('express-mysql-session')(session);
-// const sessionStore = new MySQLStore({}, pool);
 const sessionStore = new MySQLStore(sessionStoreConfig);
 
 const users = require('./components/users');
+const clients = require('./components/clients');
 
 require('./configs/passport.config')(passport);
 
@@ -41,7 +41,7 @@ app.use(
     name: 'id',
     cookie: {
       httpOnly: true,
-      maxAge: DateTime.now().endOf('day') - DateTime.now().toMillis(),
+      maxAge: DateTime.now().endOf('day').toMillis() - DateTime.now().toMillis(),
     },
     store: sessionStore,
     resave: false,
@@ -53,6 +53,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 app.use('/api/v1/auth', users.api);
+app.use('/api/v1/clients', clients.api);
 
 app.use(function (req, res, next) {
   res.status(404).send('Not found');
