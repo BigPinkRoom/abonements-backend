@@ -27,6 +27,7 @@ const sessionStore = new MySQLStore(sessionStoreConfig);
 
 const users = require('./components/users');
 const clients = require('./components/clients');
+const abonements = require('./components/abonements');
 
 require('./configs/passport.config')(passport);
 
@@ -54,6 +55,7 @@ app.use(passport.session());
 
 app.use('/api/v1/auth', users.api);
 app.use('/api/v1/clients', clients.api);
+app.use('/api/v1/abonements', abonements.api);
 
 app.use(function (req, res, next) {
   res.status(404).send('Not found');
