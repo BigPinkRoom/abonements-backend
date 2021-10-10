@@ -1,7 +1,7 @@
 const { abonementsConstants } = require('./constants');
 
 class AbonementsService {
-  createAbonementsWithClients(rawTable) {
+  createAbonementsFull(rawTable) {
     const resultTable = [];
 
     rawTable.forEach((row, index) => {
@@ -40,7 +40,7 @@ class AbonementsService {
   }
 
   _checkingClientColumn(columnName) {
-    const check = abonementsConstants.ABONEMENTS_WITH_CLIENTS_CLIENT_COLUMNS.find((checkingColumnName) => {
+    const check = abonementsConstants.ABONEMENTS_FULL_CLIENT_COLUMNS.find((checkingColumnName) => {
       return checkingColumnName === columnName;
     });
 

@@ -1,7 +1,7 @@
 module.exports.abonementsConstants = {
   ABONEMENTS_SORT_NAMES: ['number', 'visits_quantity', 'status', 'date_start', 'date_end', 'user_created_id'],
   ABONEMENTS_SORT_TYPES: ['ASC', 'DESC'],
-  ABONEMENTS_WITH_CLIENTS_SORT_NAMES: [
+  ABONEMENTS_FULL_SORT_NAMES: [
     'name',
     'surname',
     'patronymic',
@@ -14,8 +14,8 @@ module.exports.abonementsConstants = {
     'date_end',
     'user_created_id',
   ],
-  ABONEMENTS_WITH_CLIENTS_SORT_TYPES: ['ASC', 'DESC'],
-  ABONEMENTS_WITH_CLIENTS_CLIENT_COLUMNS: [
+  ABONEMENTS_FULL_SORT_TYPES: ['ASC', 'DESC'],
+  ABONEMENTS_FULL_CLIENT_COLUMNS: [
     'client_id',
     'client_birthday',
     'client_name',

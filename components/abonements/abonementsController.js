@@ -2,10 +2,10 @@ const abonementsDal = require('./abonementsDAL');
 const abonementsService = require('./abonementsService');
 
 class AbonementsController {
-  async get(req, res, next) {
+  async getFull(req, res, next) {
     try {
-      const result = await abonementsDal.getWithClients(res.locals.abonementData.params);
-      const processedResult = abonementsService.createAbonementsWithClients(result);
+      const result = await abonementsDal.getAbonementsFull(res.locals.abonementData.params);
+      const processedResult = abonementsService.createAbonementsFull(result);
 
       res.status(200).json(processedResult);
     } catch (error) {

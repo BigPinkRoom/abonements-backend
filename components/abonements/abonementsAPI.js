@@ -5,10 +5,10 @@ const commonController = require('../common/commonController');
 const validation = require('./abonementsValidation');
 
 router.post(
-  '/listWithClients',
+  '/abonementsFull',
   commonController.checkAccess(['employee', 'admin']),
-  validation.abonementMiddleware(validation.getAbonementsWithClientsSchema()),
-  controller.get
+  validation.abonementMiddleware(validation.getAbonementsFullSchema()),
+  controller.getFull
 );
 
 module.exports = router;

@@ -38,7 +38,7 @@ class AbonementsModel {
     }
   }
 
-  async getWithClients({ filters = [], sortings = [] }) {
+  async getAbonementsFull({ filters = [], sortings = [] }) {
     const params = [];
 
     const sqlSorting = AbonementsModel.createSortingString(sortings) || '';
@@ -56,8 +56,6 @@ class AbonementsModel {
 
     try {
       poolPromise = pool.promise();
-
-      console.log('test', sql, params);
 
       const [rows, fields, error] = await poolPromise.execute(sql);
       const result = rows;

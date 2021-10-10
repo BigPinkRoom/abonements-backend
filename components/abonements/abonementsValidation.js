@@ -43,13 +43,13 @@ class AbonementValidation {
     return schema;
   }
 
-  getAbonementsWithClientsSchema() {
+  getAbonementsFullSchema() {
     const schema = Joi.object({
       filters: '',
       sortings: Joi.array().items(
         Joi.object({
-          name: Joi.string().valid(...abonementsConstants.ABONEMENTS_WITH_CLIENTS_SORT_NAMES),
-          type: Joi.string().valid(...abonementsConstants.ABONEMENTS_WITH_CLIENTS_SORT_TYPES),
+          name: Joi.string().valid(...abonementsConstants.ABONEMENTS_FULL_SORT_NAMES),
+          type: Joi.string().valid(...abonementsConstants.ABONEMENTS_FULL_SORT_TYPES),
         })
       ),
       id: Joi.string().min(1).max(6).regex(/^\d+$/),
