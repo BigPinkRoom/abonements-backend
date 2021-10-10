@@ -1,12 +1,13 @@
 const { abonementsConstants } = require('./constants');
 
 class AbonementsService {
-  createAbonementsFull(rawTable) {
+  createAbonementsFull({ abonementsWithClients, abonementsEvents }) {
     const resultTable = [];
 
-    rawTable.forEach((row, index) => {
+    abonementsWithClients.forEach((row, index) => {
       const resultRow = {
         clients: [],
+        events: [],
       };
 
       const client = {};
@@ -34,6 +35,12 @@ class AbonementsService {
 
         resultTable.push(resultRow);
       }
+
+      abonementsEvents.forEach((event) => {
+        if (event.abonement_id === row.abonement_id) {
+          resultRow.events.push(event);
+        }
+      });
     });
 
     return resultTable;
