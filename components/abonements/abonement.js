@@ -21,6 +21,16 @@ class Abonement {
           };
         }),
       };
+
+      if (params.filters) {
+        this.params.filters = {};
+
+        const filterNames = Object.keys(params.filters);
+
+        filterNames.forEach((filterName) => {
+          this.params.filters[filterName] = params.filters[filterName];
+        });
+      }
     }
   }
 }
