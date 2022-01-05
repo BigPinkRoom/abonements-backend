@@ -15,39 +15,15 @@ class ClientsModel {
     }
   }
 
-  // static createSortingParams(safeSortings) {
-  //   if (safeSortings.length) {
-  //     const params = [];
-
-  //     safeSortings.forEach((sort) => {
-  //       params.push(sort.name);
-  //       params.push(sort.type);
-  //     });
-
-  //     return params;
-  //   } else {
-  //     return null;
-  //   }
-  // }
-
-  async get({ filters = [], sortings = [] }) {
-    const params = [];
-
-    const sqlSorting = ClientsModel.createSortingString(sortings) || '';
-
-    // const paramsSorting = ClientsModel.createSortingParams(sortings);
-    // if (paramsSorting) params.push(...paramsSorting);
-
-    const sqlFilter = ``;
-
-    const sql = `SELECT * FROM mydb.clients ${sqlSorting};`;
+  async addClients() {
+    const sql = ``;
 
     let poolPromise = null;
 
     try {
       poolPromise = pool.promise();
 
-      console.log('test', sql, params);
+      await poolPromise.beginTransaction();
 
       const [rows, fields, error] = await poolPromise.execute(sql);
       const result = rows;
@@ -56,6 +32,8 @@ class ClientsModel {
 
       return result;
     } catch (error) {
+      await poolPromise.rollback();
+
       console.log('mysql error', error);
 
       throw error;

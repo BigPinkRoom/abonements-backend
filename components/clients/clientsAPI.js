@@ -11,4 +11,11 @@ router.post(
   controller.get
 );
 
+router.post(
+  '/add',
+  commonController.checkAccess(['employee', 'admin']),
+  validation.clientMiddleware(validation.addClientsSchema()),
+  controller.get
+);
+
 module.exports = router;
