@@ -22,4 +22,11 @@ module.exports.abonementsConstants = {
     'client_patronymic',
     'client_surname',
   ],
+  ABONEMENTS_FULL_FILTERS: {
+    status: [1, 2, 3, 4, 5],
+  },
+  ABONEMENTS_FULL_FILTERS_TABLES_COLUMNS_ASSOTIATIONS: {
+    abonememts: '',
+    events: '',
+  }
 };

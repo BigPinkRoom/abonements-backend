@@ -30,7 +30,10 @@ class AbonementValidation {
 
   getAbonementsSchema() {
     const schema = Joi.object({
-      filters: '',
+      filters: Joi.object({
+        month: Joi.number().integer().min(1).max(12),
+        year: Joi.number().integer().min(2021).max(2050),
+      }),
       sortings: Joi.array().items(
         Joi.object({
           name: Joi.string().valid(...abonementsConstants.ABONEMENTS_SORT_NAMES),
@@ -45,7 +48,11 @@ class AbonementValidation {
 
   getAbonementsFullSchema() {
     const schema = Joi.object({
-      filters: '',
+      filters: Joi.object({
+        status: Joi.number().valid(...abonementsConstants.ABONEMENTS_FULL_FILTERS.status),
+        month: Joi.number().integer().min(1).max(12),
+        year: Joi.number().integer().min(2021).max(2050),
+      }),
       sortings: Joi.array().items(
         Joi.object({
           name: Joi.string().valid(...abonementsConstants.ABONEMENTS_FULL_SORT_NAMES),

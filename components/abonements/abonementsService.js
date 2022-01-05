@@ -1,3 +1,4 @@
+const { DateTime } = require('luxon');
 const { abonementsConstants } = require('./constants');
 
 class AbonementsService {
@@ -33,11 +34,16 @@ class AbonementsService {
       } else {
         resultRow.clients.push(client);
 
+        delete resultRow.status_id;
+
         resultTable.push(resultRow);
       }
 
       abonementsEvents.forEach((event) => {
         if (event.abonement_id === row.abonement_id) {
+          delete event.abonement_id;
+          delete event.event_type_id;
+
           resultRow.events.push(event);
         }
       });
@@ -61,6 +67,28 @@ class AbonementsService {
 
     return Boolean(check);
   }
+
+  createFilters() {}
+
+  // setAbonementsFullDate(options) {
+  //   if (!options.year) {
+  //     options.year = DateTime.local().year;
+  //   }
+  //   if (!options.month) {
+  //     options.month = DateTime.local().month;
+  //   }
+
+  //   return options;
+  // }
+
+  // setDateFilterString(options) {
+  //   const strings = [];
+
+  //   if(options.year) {
+  //     strings.push(``)
+  //   }
+  //   return `YEAR(${options.year}) AND MONTH(${options.month})`;
+  // }
 }
 
 module.exports = new AbonementsService();
