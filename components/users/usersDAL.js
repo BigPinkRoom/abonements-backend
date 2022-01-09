@@ -4,15 +4,15 @@ const bcrypt = require('bcrypt');
 const saltRounds = 10;
 
 class UsersModel {
-  async add({ email, password, surname, name, patronymic }) {
-    const sql = 'SELECT add_user(?, ?, 0, ?, ?, ?, NULL) AS userId;';
+  async add({ email, password, surname, name, patronymic, branch }) {
+    const sql = 'SELECT add_user(?, ?, 0, ?, ?, ?, NULL, ?) AS userId;';
     let poolPromise = null;
 
     try {
       poolPromise = pool.promise();
 
       const passwordHashed = await bcrypt.hash(password, saltRounds);
-      const params = [email, passwordHashed, surname, name, patronymic];
+      const params = [email, passwordHashed, surname, name, patronymic, branch];
 
       const [rows, fields, error] = await poolPromise.execute(sql, params);
 
@@ -30,9 +30,9 @@ class UsersModel {
     }
   }
 
-  async isExist(email) {
-    const sql = 'SELECT EXISTS(SELECT user_id FROM mydb.users WHERE email = ? LIMIT 1) AS value;';
-    const params = [email];
+  async isExist(email, branchId) {
+    const sql = 'SELECT EXISTS(SELECT user_id FROM mydb.users WHERE email = ? AND branch_id = ? LIMIT 1) AS value;';
+    const params = [email, branchId];
     let poolPromise = null;
 
     try {
@@ -45,18 +45,19 @@ class UsersModel {
     } catch (error) {
       console.log('error dal', error);
 
-      throw new Error(error);
+      throw error;
     } finally {
       pool.releaseConnection(poolPromise);
     }
   }
 
-  async getUserByEmail(email) {
-    const sql =
-      'SELECT users.*, roles.name AS `role_name` FROM users LEFT JOIN `roles` ON users.role_id = roles.role_id WHERE users.email = ?;';
+  async getUserByEmail(email, branchId) {
+    const sql = `SELECT users.*, roles.name AS role_name FROM users 
+    LEFT JOIN roles ON users.role_id = roles.role_id 
+    WHERE users.email = ? AND branch_id = ?;`;
     let poolPromise = null;
 
-    let params = [email];
+    let params = [email, branchId];
 
     try {
       poolPromise = pool.promise();

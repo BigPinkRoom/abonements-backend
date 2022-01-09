@@ -10,6 +10,7 @@ class UsersService {
       name: user.name,
       patronymic: user.patronymic,
       user_role: user.role_name,
+      branch: user.branch_id,
     };
 
     return safeUserData;

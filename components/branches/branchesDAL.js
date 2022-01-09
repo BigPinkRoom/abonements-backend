@@ -1,16 +1,19 @@
 const pool = require('../../pool.db').getPool();
 const helpersDAL = require('../../helpers/helpersDAL');
 
-class ClientsModel {
-  async addClients() {
-    const sql = ``;
+class BranchesModel {
+  async get({ sortings = [] } = {}) {
+    const params = [];
+
+    const sqlSorting = helpersDAL.createSortingString(sortings) || '';
+
+    const sql = `SELECT * FROM mydb.branches
+    ${sqlSorting};`;
 
     let poolPromise = null;
 
     try {
       poolPromise = pool.promise();
-
-      await poolPromise.beginTransaction();
 
       const [rows, fields, error] = await poolPromise.execute(sql);
       const result = rows;
@@ -19,8 +22,6 @@ class ClientsModel {
 
       return result;
     } catch (error) {
-      await poolPromise.rollback();
-
       console.log('mysql error', error);
 
       throw error;
@@ -30,4 +31,4 @@ class ClientsModel {
   }
 }
 
-module.exports = new ClientsModel();
+module.exports = new BranchesModel();

@@ -56,10 +56,11 @@ module.exports = function (passport) {
       },
       async function (req, email, password, done) {
         try {
-          const user = await usersDal.getUserByEmail(email);
+          const branch = req.body.branch;
+          const user = await usersDal.getUserByEmail(email, branch);
 
           if (!user) {
-            return done(null, false, { message: `User with email ${email} was not found` });
+            return done(null, false, `User with email ${email} was not found`);
 
             // TODO delete
             // return done(null, false, createError(401, `User with email ${email} was not found`));
@@ -69,7 +70,7 @@ module.exports = function (passport) {
           const match = await bcrypt.compare(password, userHash);
 
           if (!match) {
-            return done(null, false, { message: 'Not a matching password' });
+            return done(null, false, 'Not a matching password');
           }
 
           const safeUser = service.createSafeUser(user);

@@ -40,7 +40,7 @@ class AbonementValidation {
           type: Joi.string().valid(...abonementsConstants.ABONEMENTS_SORT_TYPES),
         })
       ),
-      id: Joi.string().min(1).max(6).regex(/^\d+$/),
+      id: Joi.string().min(1).max(6).regex(/^\d+$/), // TODO
     });
 
     return schema;
@@ -59,7 +59,7 @@ class AbonementValidation {
           type: Joi.string().valid(...abonementsConstants.ABONEMENTS_FULL_SORT_TYPES),
         })
       ),
-      id: Joi.string().min(1).max(6).regex(/^\d+$/),
+      id: Joi.string().min(1).max(6).regex(/^\d+$/), // TODO
     });
 
     return schema;

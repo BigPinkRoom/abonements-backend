@@ -15,9 +15,10 @@ class UserValidation {
         await schema.validateAsync(user);
 
         const email = user.email;
+        const branch = user.branch;
 
         if (checkExistEmail) {
-          await isExist(email);
+          await isExist(email, branch);
         }
 
         next();
@@ -45,7 +46,7 @@ class UserValidation {
             'Field "password" must be contain at least 8 symbols. At least one digit, one uppercase (latin), one lowercase (latin) and one of symbols("!@#$%^&*")'
           )
         ),
-      passwordConfirm: Joi.string()
+      'password-confirm': Joi.string()
         .valid(Joi.ref('password'))
         .required()
         .error(new Error('Field "password" and field "confirm password" must match ')),
@@ -61,6 +62,12 @@ class UserValidation {
         .pattern(RegExp(patternName))
         .required()
         .error(new Error('Field "patronymic" must be contain at least 2 and at max 100 letters')),
+      branch: Joi.number()
+        .integer()
+        .min(1)
+        .max(5000)
+        .required()
+        .error(new Error('Field "branch" must be contain at least 1 digit')),
     });
 
     return schema;
@@ -83,6 +90,12 @@ class UserValidation {
             'Field "password" must be contain at least 8 symbols. At least one digit, one uppercase (latin), one lowercase (latin) and one of symbols("!@#$%^&*")'
           )
         ),
+      branch: Joi.number()
+        .integer()
+        .min(1)
+        .max(5000)
+        .required()
+        .error(new Error('Field "branch" must be contain at least 1 digit')),
     });
 
     return schema;

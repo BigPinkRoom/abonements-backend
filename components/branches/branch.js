@@ -1,22 +1,12 @@
 const escapeHtml = require('escape-html');
 
-class Abonement {
-  constructor({ abonement = null, params = null }) {
-    if (abonement) {
-      this.abonement = {
-        number: escapeHtml(abonement.number),
-        visits_quantity: escapeHtml(abonement.visits_quantity),
-        status: escapeHtml(abonement.status),
-        date_start: escapeHtml(abonement.date_start),
-        date_end: escapeHtml(abonemet.date_end),
-      };
-    }
-
+class Branch {
+  constructor({ params = null }) {
     if (params) {
       this.params = {};
 
       if (params.sortings && Array.isArray(params.sortings)) {
-        params.sortings.map((param) => {
+        this.params.sortings = params.sortings.map((param) => {
           return {
             name: escapeHtml(param.name),
             type: escapeHtml(param.type),
@@ -37,4 +27,4 @@ class Abonement {
   }
 }
 
-module.exports = Abonement;
+module.exports = Branch;
