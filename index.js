@@ -1,9 +1,14 @@
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
+const session = require('express-session');
+const passport = require('passport');
 const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
+
 const app = express();
 
+app.use(cookieParser());
 app.use(morgan('dev'));
 require('dotenv').config();
 
@@ -16,26 +21,11 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-const session = require('express-session');
-const passport = require('passport');
-
 require('./pool.db').getPool();
 
 const sessionStoreConfig = require('./configs/db.sessionStore.config');
 const MySQLStore = require('express-mysql-session')(session);
 const sessionStore = new MySQLStore(sessionStoreConfig);
-
-const users = require('./components/users');
-const clients = require('./components/clients');
-const abonements = require('./components/abonements');
-const branches = require('./components/branches');
-
-require('./configs/passport.config')(passport);
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-const { DateTime } = require('luxon');
 
 app.use(
   session({
@@ -43,16 +33,31 @@ app.use(
     name: 'id',
     cookie: {
       httpOnly: true,
-      maxAge: DateTime.now().endOf('day').toMillis() - DateTime.now().toMillis(),
+      // maxAge: DateTime.now().endOf('day').toMillis() + DateTime.now().toMillis(),
+      maxAge: 1000 * 60 * 60 * 24,
+      sameSite: 'lax',
+      secure: false,
     },
     store: sessionStore,
     resave: false,
-    saveUninitialized: false,
+    saveUninitialized: true,
   })
 );
 
 app.use(passport.initialize());
 app.use(passport.session());
+
+require('./configs/passport.config')(passport);
+
+const users = require('./components/users');
+const clients = require('./components/clients');
+const abonements = require('./components/abonements');
+const branches = require('./components/branches');
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+const { DateTime } = require('luxon');
 
 app.use('/api/v1/auth', users.api);
 app.use('/api/v1/clients', clients.api);
