@@ -40,11 +40,12 @@ class UsersModel {
       const [rows, fields, error] = await poolPromise.execute(sql, params);
 
       if (rows[0].value > 0) {
-        throw `Email ${email} is already exists`;
+        const error = new Error(`User:isExist`);
+        error.userEmail = email;
+
+        throw error;
       }
     } catch (error) {
-      console.log('error dal', error);
-
       throw error;
     } finally {
       pool.releaseConnection(poolPromise);

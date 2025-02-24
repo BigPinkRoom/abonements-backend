@@ -23,51 +23,53 @@ class UserValidation {
 
         next();
       } catch (error) {
-        let message = error.message;
-        const { details } = error;
+        const message = error.message;
+        const userEmail = error.userEmail;
 
-        if (details) {
-          message = details.map((i) => i.message).join(',');
-        }
-
-        return res.status(422).json({ error: { message: message } });
+        res.status(422).json({ error: { message, userEmail } });
+        next(error);
       }
     };
   }
 
   userAddSchema() {
     const schema = Joi.object({
-      email: Joi.string().email().required(),
-      password: Joi.string()
-        .pattern(RegExp(patternPassword))
-        .required()
-        .error(
-          new Error(
-            'Field "password" must be contain at least 8 symbols. At least one digit, one uppercase (latin), one lowercase (latin) and one of symbols("!@#$%^&*")'
-          )
-        ),
-      'password-confirm': Joi.string()
-        .valid(Joi.ref('password'))
-        .required()
-        .error(new Error('Field "password" and field "confirm password" must match ')),
-      surname: Joi.string()
-        .pattern(RegExp(patternName))
-        .required()
-        .error(new Error('Field "surname" must be contain at least 2 and at max 100 letters')),
-      name: Joi.string()
-        .pattern(RegExp(patternName))
-        .required()
-        .error(new Error('Field "name" must be contain at least 2 and at max 100 letters')),
-      patronymic: Joi.string()
-        .pattern(RegExp(patternName))
-        .required()
-        .error(new Error('Field "patronymic" must be contain at least 2 and at max 100 letters')),
-      branch: Joi.number()
-        .integer()
-        .min(1)
-        .max(5000)
-        .required()
-        .error(new Error('Field "branch" must be contain at least 1 digit')),
+      email: Joi.string().email().required().messages({
+        'string.empty': 'Email:required',
+        'string.email': 'Email:validEmail',
+        'string.base': 'Email:string',
+      }),
+      password: Joi.string().pattern(RegExp(patternPassword)).required().messages({
+        'string.empty': 'Password:required',
+        'string.base': 'Password:string',
+        'string.pattern.base': 'Password:pattern',
+      }),
+      'password-confirm': Joi.string().valid(Joi.ref('password')).required().messages({
+        'string.empty': 'PasswordConfirm:required',
+        'string.base': 'PasswordConfirm:string',
+        'any.only': 'PasswordConfirm:match',
+      }),
+      surname: Joi.string().pattern(RegExp(patternName)).required().messages({
+        'string.empty': 'Surname:required',
+        'string.base': 'Surname:string',
+        'string.pattern.base': 'Surname:pattern',
+      }),
+      name: Joi.string().pattern(RegExp(patternName)).required().messages({
+        'string.empty': 'Name:required',
+        'string.base': 'Name:string',
+        'string.pattern.base': 'Name:pattern',
+      }),
+      patronymic: Joi.string().pattern(RegExp(patternName)).required().messages({
+        'string.empty': 'Patronymic:required',
+        'string.base': 'Patronymic:string',
+        'string.pattern.base': 'Patronymic:pattern',
+      }),
+      branch: Joi.number().integer().min(1).max(5000).required().messages({
+        'string.empty': 'Branch:required',
+        'number.base': 'Branch:number',
+        'string.min': 'Branch:min',
+        'string.min': 'Branch:max',
+      }),
     });
 
     return schema;

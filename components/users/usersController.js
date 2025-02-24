@@ -6,7 +6,7 @@ class UsersController {
       await passport.authenticate('sign-up', function (err, user, info) {
         if (err) return next(err);
 
-        res.status(201).json('user created');
+        res.status(201).json({ message: `User:created`, userEmail: user.email });
       })(req, res, next);
     } catch (error) {
       console.log('controller add error', error);
@@ -25,7 +25,7 @@ class UsersController {
           req.session.touch();
 
           req.login(user, function (err) {
-            res.status(200).json({ message: 'Login succusseful' });
+            res.status(200).json({ user: req.user });
           });
         }
       })(req, res, next);
