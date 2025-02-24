@@ -66,8 +66,8 @@ module.exports = function (passport) {
             // return done(null, false, createError(401, `User with email ${email} was not found`));
           }
 
-          const userHash = user.password;
-          const match = await bcrypt.compare(password, userHash);
+          const userPasswordHash = user.password;
+          const match = await bcrypt.compare(password, userPasswordHash);
 
           if (!match) {
             return done(null, false, 'Not a matching password');
