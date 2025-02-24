@@ -3,9 +3,12 @@ const router = Router();
 const controller = require('./usersController');
 const commonController = require('../common/commonController');
 const validation = require('./usersValidation');
+const multer = require('multer');
+const encoder = multer();
 
 router.post(
   '/signup',
+  encoder.none(),
   commonController.isNotAuthenticated,
   validation.userMiddleware(validation.userAddSchema(), (checkExistEmail = true)),
   controller.add
@@ -13,6 +16,7 @@ router.post(
 
 router.post(
   '/login',
+  encoder.none(),
   commonController.isNotAuthenticated,
   validation.userMiddleware(validation.userLoginSchema()),
   controller.login
