@@ -60,8 +60,10 @@ module.exports = function (passport) {
           const user = await usersDal.getUserByEmail(email, branch);
 
           if (!user) {
-            return done(null, false, `User with email ${email} was not found`);
+            const message = 'User:notExist';
+            const userEmail = email;
 
+            res.status(404).json({ error: { message, userEmail } });
             // TODO delete
             // return done(null, false, createError(401, `User with email ${email} was not found`));
           }
