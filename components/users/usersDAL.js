@@ -97,6 +97,36 @@ class UsersModel {
     }
   }
 
+  async getUserIdFromSession(sessionID) {
+    const params = [sessionID];
+
+    const sql = `SELECT data FROM sessions WHERE session_id = ?`;
+
+    let poolPromise = null;
+
+    try {
+      poolPromise = pool.promise();
+
+      let currentUserId = null;
+
+      const [rows, fields, error] = await poolPromise.execute(sql, params);
+
+      if (rows.length) {
+        currentUserId = JSON.parse(rows[0]?.data).passport?.user;
+      }
+
+      if (error) throw error;
+
+      return currentUserId;
+    } catch (error) {
+      console.log('mysql error', error);
+
+      throw error;
+    } finally {
+      pool.releaseConnection(poolPromise);
+    }
+  }
+
   // TODO delete
   // async getUserRole(roleId) {
   //   const sql = 'SELECT * FROM `roles` WHERE `role_id` = ?';
