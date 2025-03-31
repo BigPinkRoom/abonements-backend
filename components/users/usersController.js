@@ -41,8 +41,8 @@ class UsersController {
     try {
       res.status(200).json(req.user);
     } catch (error) {
+      console.log('error get auth user', error);
       res.status(500).json({ error: { message: error } });
-      next(error);
     }
   }
 

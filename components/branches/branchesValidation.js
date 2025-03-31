@@ -36,7 +36,6 @@ class branchValidation {
           type: Joi.string().valid(...branchesConstants.BRANCHES_SORT_TYPES),
         })
       ),
-      id: Joi.string().min(1).max(6).regex(/^\d+$/),
     });
 
     return schema;

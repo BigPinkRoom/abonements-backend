@@ -12,7 +12,6 @@ class CommonController {
           next();
         } else {
           res.status(401).json({ error: { message: 'User is not authenticated' } });
-          // return new Error({ error: { message: 'User is not authenticated' } });
         }
       } catch (error) {
         res.status(500).json({ error: { message: error } });
