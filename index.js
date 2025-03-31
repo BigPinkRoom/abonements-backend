@@ -30,17 +30,17 @@ const sessionStore = new MySQLStore(sessionStoreConfig);
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
+    saveUninitialized: true,
     name: 'id',
     cookie: {
       httpOnly: true,
       // maxAge: DateTime.now().endOf('day').toMillis() + DateTime.now().toMillis(),
       maxAge: 1000 * 60 * 60 * 24,
       sameSite: 'lax',
-      secure: false,
+      secure: false, // TODO
     },
     store: sessionStore,
     resave: false,
-    saveUninitialized: true,
   })
 );
 
@@ -53,6 +53,7 @@ const users = require('./components/users');
 const clients = require('./components/clients');
 const abonements = require('./components/abonements');
 const branches = require('./components/branches');
+const menus = require('./components/menus');
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -63,6 +64,7 @@ app.use('/api/v1/auth', users.api);
 app.use('/api/v1/clients', clients.api);
 app.use('/api/v1/abonements', abonements.api);
 app.use('/api/v1/branches', branches.api);
+app.use('/api/v1/menus', menus.api);
 
 app.use(function (req, res, next) {
   res.status(404).send('Not found');
