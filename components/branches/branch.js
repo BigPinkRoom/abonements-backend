@@ -20,7 +20,7 @@ class Branch {
         const filterNames = Object.keys(params.filters);
 
         filterNames.forEach((filterName) => {
-          this.params.filters[filterName] = params.filters[filterName];
+          this.params.filters[filterName] = escapeHtml(params.filters[filterName]);
         });
       }
     }
