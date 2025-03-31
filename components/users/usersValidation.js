@@ -3,7 +3,7 @@ const escapeHtml = require('escape-html');
 const { isExist } = require('./usersDAL');
 const User = require('./user');
 
-const patternPassword = '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])(?=.{8,500})';
+const patternPassword = '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])(?=.{8,150})';
 const patternName = '^[a-zA-Zа-яА-Я]{2,100}$'; //TODO
 
 class UserValidation {
@@ -27,7 +27,6 @@ class UserValidation {
         const userEmail = error.userEmail;
 
         res.status(422).json({ error: { message, userEmail } });
-        next(error);
       }
     };
   }
@@ -44,7 +43,7 @@ class UserValidation {
         'string.base': 'Password:string',
         'string.pattern.base': 'Password:pattern',
       }),
-      'password-confirm': Joi.string().valid(Joi.ref('password')).required().messages({
+      passwordConfirm: Joi.string().valid(Joi.ref('password')).required().messages({
         'string.empty': 'PasswordConfirm:required',
         'string.base': 'PasswordConfirm:string',
         'any.only': 'PasswordConfirm:match',
@@ -65,39 +64,31 @@ class UserValidation {
         'string.pattern.base': 'Patronymic:pattern',
       }),
       branch: Joi.number().integer().min(1).max(5000).required().messages({
-        'string.empty': 'Branch:required',
+        'any.required': 'Branch:required',
         'number.base': 'Branch:number',
-        'string.min': 'Branch:min',
-        'string.min': 'Branch:max',
+        'number.min': 'Branch:min',
+        'number.max': 'Branch:max',
       }),
     });
 
     return schema;
-
-    // const options = {
-    //   abortEarly: false,
-    //   allowUnknown: true,
-    //   stripUnknown: true,
-    // };
   }
 
   userLoginSchema() {
     const schema = Joi.object({
-      email: Joi.string().email().required(),
-      password: Joi.string()
-        .pattern(RegExp(patternPassword))
-        .required()
-        .error(
-          new Error(
-            'Field "password" must be contain at least 8 symbols. At least one digit, one uppercase (latin), one lowercase (latin) and one of symbols("!@#$%^&*")'
-          )
-        ),
-      branch: Joi.number()
-        .integer()
-        .min(1)
-        .max(5000)
-        .required()
-        .error(new Error('Field "branch" must be contain at least 1 digit')),
+      email: Joi.string().email().required().messages({
+        'string.empty': 'Email:required',
+        'string.email': 'Email:validEmail',
+        'string.base': 'Email:string',
+      }),
+      password: Joi.string().pattern(RegExp(patternPassword)).required().messages({
+        'string.empty': 'Password:required',
+        'string.base': 'Password:string',
+        'string.pattern.base': 'Password:pattern',
+      }),
+      branch: Joi.number().integer().min(1).max(5000).required().messages({
+        'any.required': 'Branch:required',
+      }),
     });
 
     return schema;
