@@ -54,6 +54,7 @@ const clients = require('./components/clients');
 const abonements = require('./components/abonements');
 const branches = require('./components/branches');
 const menus = require('./components/menus');
+const relatives = require('./components/relatives');
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -65,6 +66,7 @@ app.use('/api/v1/clients', clients.api);
 app.use('/api/v1/abonements', abonements.api);
 app.use('/api/v1/branches', branches.api);
 app.use('/api/v1/menus', menus.api);
+app.use('/api/v1/relatives', relatives.api);
 
 app.use(function (req, res, next) {
   res.status(404).send('Not found');
