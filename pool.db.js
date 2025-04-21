@@ -9,6 +9,7 @@ const getPool = () => {
   }
 
   pool = mysql.createPool(dbConfig);
+  return pool;
 };
 
 module.exports.getPool = getPool;
