@@ -21,6 +21,27 @@ module.exports.abonementsConstants = {
     'client_name',
     'client_patronymic',
     'client_surname',
+    'client_gender',
+  ],
+  ABONEMENTS_FULL_RELATIVE_COLUMNS: [
+    'relative_id',
+    'relative_name',
+    'relative_patronymic',
+    'relative_surname',
+    'relative_type_id',
+    'relative_telephone',
+  ],
+  ABONEMENTS_FULL_ABONEMENT_COLUMNS: [
+    'abonement_id',
+    'visits_quantity',
+    'visits_left',
+    'status_type',
+    'status',
+    'date_create',
+    'date_start',
+    'date_end',
+    'user_created_id',
+    'branch_id',
   ],
   ABONEMENTS_FULL_FILTERS: {
     status: [1, 2, 3, 4, 5],
@@ -28,5 +49,6 @@ module.exports.abonementsConstants = {
   ABONEMENTS_FULL_FILTERS_TABLES_COLUMNS_ASSOTIATIONS: {
     abonememts: '',
     events: '',
-  }
+  },
+  GENDER_TYPES: [0, 1],
 };

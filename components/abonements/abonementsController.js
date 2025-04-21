@@ -16,5 +16,29 @@ class AbonementsController {
       next(error);
     }
   }
+
+  async addFamily(req, res, next) {
+    try {
+      const family = await abonementsDAL.addFamily(res.locals.familyData, req.user);
+      res.status(200).json(family);
+    } catch (error) {
+      console.log('controller add family get error', error);
+
+      res.status(500).json({ error: { message: error } });
+      next(error);
+    }
+  }
+
+  async updateFamily(req, res, next) {
+    try {
+      const family = await abonementsDAL.updateFamily(res.locals.familyData, req.user);
+      res.status(200).json(family);
+    } catch (error) {
+      console.log('controller add family get error', error);
+
+      res.status(500).json({ error: { message: error } });
+      next(error);
+    }
+  }
 }
 module.exports = new AbonementsController();

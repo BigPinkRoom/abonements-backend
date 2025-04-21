@@ -1,94 +1,84 @@
 const { DateTime } = require('luxon');
 const { abonementsConstants } = require('./constants');
+const helpersDate = require('../../helpers/helpersDate');
 
 class AbonementsService {
   createAbonementsFull({ abonementsWithClients, abonementsEvents }) {
-    const resultTable = [];
+    const groupedAbonements = {};
 
-    abonementsWithClients.forEach((row, index) => {
-      const resultRow = {
-        clients: [],
-        events: [],
-      };
+    abonementsWithClients.forEach((row) => {
+      const abonementId = row.abonement_id;
 
-      const client = {};
-
-      const isExistingAbonement = this._checkingExistingAbonement({ resultTable, abonementId: row.abonement_id });
-
-      for (let column in row) {
-        const isClientColumn = this._checkingClientColumn(column);
-
-        if (isClientColumn) {
-          client[column] = row[column];
-        }
-
-        if (!isExistingAbonement && !isClientColumn) {
-          resultRow[column] = row[column];
-        }
+      if (!groupedAbonements[abonementId]) {
+        groupedAbonements[abonementId] = {
+          abonement: {},
+          clients: [],
+          relatives: [],
+          events: [],
+        };
       }
 
-      if (isExistingAbonement) {
-        const lastIndexTable = resultTable.length - 1;
+      const { client, relative, abonement } = this._extractEntities(row);
 
-        resultTable[lastIndexTable].clients.push(client);
-      } else {
-        resultRow.clients.push(client);
-
-        delete resultRow.status_id;
-
-        resultTable.push(resultRow);
+      if (client && !groupedAbonements[abonementId].clients.some((c) => c.client_id === client.client_id)) {
+        groupedAbonements[abonementId].clients.push(client);
       }
 
-      abonementsEvents.forEach((event) => {
-        if (event.abonement_id === row.abonement_id) {
-          delete event.abonement_id;
-          delete event.event_type_id;
+      if (relative && !groupedAbonements[abonementId].relatives.some((r) => r.relative_id === relative.relative_id)) {
+        groupedAbonements[abonementId].relatives.push(relative);
+      }
 
-          resultRow.events.push(event);
-        }
-      });
+      groupedAbonements[abonementId].abonement = abonement;
     });
 
-    return resultTable;
+    this._addEventsToAbonements(groupedAbonements, abonementsEvents);
+
+    return Object.values(groupedAbonements);
+  }
+
+  _extractEntities(row) {
+    const client = {};
+    const relative = {};
+    const abonement = {};
+
+    const columnHandlers = {
+      client: (key, value) => this._checkingClientColumn(key) && (client[key] = value),
+      relative: (key, value) => this._checkingRelativeColumn(key) && (relative[key] = value),
+      abonement: (key, value) => this._checkingAbonementColumn(key) && (abonement[key] = value),
+    };
+
+    Object.entries(row).forEach(([key, value]) => {
+      Object.values(columnHandlers).forEach((handler) => handler(key, value));
+    });
+
+    return { client, relative, abonement };
+  }
+
+  _addEventsToAbonements(groupedAbonements, events) {
+    events.forEach((event) => {
+      if (event.event_id !== null) {
+        const abonementId = event.abonement_id;
+        if (groupedAbonements[abonementId]) {
+          const { abonement_id, event_type_id, ...eventData } = event;
+          groupedAbonements[abonementId].events.push(eventData);
+        }
+      }
+    });
   }
 
   _checkingClientColumn(columnName) {
-    const check = abonementsConstants.ABONEMENTS_FULL_CLIENT_COLUMNS.find((checkingColumnName) => {
-      return checkingColumnName === columnName;
-    });
-
-    return Boolean(check);
+    return abonementsConstants.ABONEMENTS_FULL_CLIENT_COLUMNS.includes(columnName);
   }
 
-  _checkingExistingAbonement(options) {
-    const check = options.resultTable.find((resultTableRow) => {
-      return resultTableRow.abonement_id === options.abonementId;
-    });
+  _checkingRelativeColumn(columnName) {
+    return abonementsConstants.ABONEMENTS_FULL_RELATIVE_COLUMNS.includes(columnName);
+  }
 
-    return Boolean(check);
+  _checkingAbonementColumn(columnName) {
+    return abonementsConstants.ABONEMENTS_FULL_ABONEMENT_COLUMNS.includes(columnName);
   }
 
   createFilters() {}
-
-  // setAbonementsFullDate(options) {
-  //   if (!options.year) {
-  //     options.year = DateTime.local().year;
-  //   }
-  //   if (!options.month) {
-  //     options.month = DateTime.local().month;
-  //   }
-
-  //   return options;
-  // }
-
-  // setDateFilterString(options) {
-  //   const strings = [];
-
-  //   if(options.year) {
-  //     strings.push(``)
-  //   }
-  //   return `YEAR(${options.year}) AND MONTH(${options.month})`;
-  // }
 }
 
 module.exports = new AbonementsService();

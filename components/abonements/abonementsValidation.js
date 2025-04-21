@@ -1,18 +1,46 @@
 const Joi = require('joi');
 const { abonementsConstants } = require('./constants');
+const helpersDate = require('../../helpers/helpersDate');
 const Abonement = require('./abonement');
+
+// const formatDateToMySQL = (dateString) => {
+//   const [day, month, year] = dateString.split('.');
+//   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+// };
 
 class AbonementValidation {
   abonementMiddleware(schema) {
     return async (req, res, next) => {
       try {
-        const abonementData = new Abonement(req.body);
+        const params = {
+          filters: req.body.filters || {},
+          sortings: req.body.sortings || [],
+        };
 
-        for (let param in abonementData) {
-          await schema.validateAsync(abonementData[param]);
+        await schema.validateAsync(params);
+        res.locals.abonementData = { params };
+
+        next();
+      } catch (error) {
+        let message = error.message;
+        const { details } = error;
+
+        if (details) {
+          message = details.map((i) => i.message).join(',');
         }
 
-        res.locals.abonementData = abonementData;
+        return res.status(422).json({ error: { message: message } });
+      }
+    };
+  }
+
+  abonementMiddlewareFamily(schema) {
+    return async (req, res, next) => {
+      try {
+        const familyData = new Abonement({ family: req.body });
+
+        await schema.validateAsync(familyData);
+        res.locals.familyData = familyData;
 
         next();
       } catch (error) {
@@ -60,6 +88,143 @@ class AbonementValidation {
         })
       ),
       id: Joi.string().min(1).max(6).regex(/^\d+$/), // TODO
+    });
+
+    return schema;
+  }
+
+  addFamilySchema() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const minDate = new Date(2000, 0, 1); // 01.01.2000
+
+    const schema = Joi.object({
+      family: Joi.object({
+        clients: Joi.array()
+          .required()
+          .items(
+            Joi.object({
+              id: Joi.number().min(1).max(999999).required(),
+              name: Joi.string().min(1).max(150).required(),
+              surname: Joi.string().min(1).max(150).required(),
+              patronymic: Joi.string().min(1).max(150).required(),
+              birthday: Joi.string()
+                .pattern(/^\d{2}\.\d{2}\.\d{4}$/)
+                .required()
+                .custom((value, helpers) => {
+                  try {
+                    const [day, month, year] = value.split('.');
+                    const date = new Date(year, month - 1, day);
+
+                    if (isNaN(date.getTime())) {
+                      return helpers.error('date.invalid');
+                    }
+
+                    if (date > today || date < minDate) {
+                      return helpers.error('date.range');
+                    }
+
+                    return value;
+                  } catch (error) {
+                    return helpers.error('date.invalid', error);
+                  }
+                })
+                .messages({
+                  'string.pattern.base': 'Дата рождения должна быть в формате DD.MM.YYYY',
+                  'date.invalid': 'Некорректная дата рождения',
+                  'date.range': 'Дата рождения должна быть между 01.01.2000 и текущей датой',
+                }),
+              gender: Joi.number()
+                .required()
+                .valid(...abonementsConstants.GENDER_TYPES),
+              is_new: Joi.boolean().optional(),
+            })
+          ),
+        relatives: Joi.array()
+          .required()
+          .items(
+            Joi.object({
+              id: Joi.number().min(1).max(999999).required(),
+              name: Joi.string().min(1).max(150).required(),
+              surname: Joi.string().min(1).max(150).required(),
+              patronymic: Joi.string().min(1).max(150).required(),
+              relative_type_id: Joi.number().min(1).max(20).required(),
+              telephone: Joi.string().required(),
+              is_new: Joi.boolean().optional(),
+            })
+          ),
+        abonements: Joi.object({
+          duration: Joi.string().required(),
+          quantity: Joi.string().required(),
+          activation_date: Joi.date().min(today).required(),
+        }).required(),
+      }),
+    });
+    return schema;
+  }
+
+  updateFamilySchema() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const minDate = new Date(2000, 0, 1);
+    const schema = Joi.object({
+      family: Joi.object({
+        clients: Joi.array().items(
+          Joi.object({
+            id: Joi.number().min(1).max(999999),
+            name: Joi.string().min(1).max(150),
+            surname: Joi.string().min(1).max(150),
+            patronymic: Joi.string().min(1).max(150),
+            birthday: Joi.string()
+              .pattern(/^\d{2}\.\d{2}\.\d{4}$/)
+
+              .custom((value, helpers) => {
+                try {
+                  const [day, month, year] = value.split('.');
+                  const date = new Date(year, month - 1, day);
+
+                  if (isNaN(date.getTime())) {
+                    return helpers.error('date.invalid');
+                  }
+
+                  if (date > today || date < minDate) {
+                    return helpers.error('date.range');
+                  }
+
+                  return value;
+                } catch (error) {
+                  return helpers.error('date.invalid');
+                }
+              })
+              .messages({
+                'string.pattern.base': 'Дата рождения должна быть в формате DD.MM.YYYY',
+                'date.invalid': 'Некорректная дата рождения',
+                'date.range': 'Дата рождения должна быть между 01.01.2000 и текущей датой',
+              }),
+            gender: Joi.number().valid(...abonementsConstants.GENDER_TYPES),
+            is_new: Joi.boolean().optional(),
+          })
+        ),
+        relatives: Joi.array().items(
+          Joi.object({
+            id: Joi.number().min(1).max(999999),
+            name: Joi.string().min(1).max(150),
+            surname: Joi.string().min(1).max(150),
+            patronymic: Joi.string().min(1).max(150),
+            relative_type_id: Joi.number().min(1).max(20),
+            telephone: Joi.string(),
+            is_new: Joi.boolean().optional(),
+          })
+        ),
+        abonements: Joi.object({
+          id: Joi.number().min(1).max(999999),
+          duration: Joi.string(),
+          quantity: Joi.string(),
+          activation_date: Joi.date().min(today),
+        }).required(),
+      }),
     });
 
     return schema;
