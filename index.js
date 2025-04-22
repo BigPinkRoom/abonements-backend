@@ -8,11 +8,20 @@ const cookieParser = require('cookie-parser');
 
 const app = express();
 
+app.set('trust proxy', 1);
+
 app.use(cookieParser());
 app.use(morgan('dev'));
 require('dotenv').config();
 
 app.use(helmet());
+
+const rateLimit = require('express-rate-limit');
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 минут
+  max: 1000, // лимит для каждого IP
+});
+app.use(limiter);
 
 const corsOptions = {
   origin: 'http://localhost:3000',
