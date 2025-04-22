@@ -50,5 +50,6 @@ module.exports.abonementsConstants = {
     abonememts: '',
     events: '',
   },
+  // 0 - мальчик, 1 - девочка
   GENDER_TYPES: [0, 1],
 };
