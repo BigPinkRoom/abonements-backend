@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "start": "node server.js",
+    "build": "tsc"
   },
   "repository": {
     "type": "git",
@@ -25,6 +27,7 @@
     "escape-html": "^1.0.3",
     "express": "^4.17.1",
     "express-mysql-session": "^2.1.6",
+    "express-rate-limit": "^7.5.0",
     "express-session": "^1.17.2",
     "helmet": "^4.6.0",
     "http-errors": "^1.8.0",
