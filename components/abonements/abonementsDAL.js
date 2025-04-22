@@ -43,7 +43,7 @@ class AbonementsModel {
     const sqlSorting = helpersDAL.createSortingString(sortings) || '';
     const sqlFilter = helpersDAL.createFilteringString(filters, 'mydb.abonements.date_create') || '';
 
-    const sql = `SELECT abonements.*, clients.client_id AS client_id, clients.name AS client_name, clients.surname AS client_surname, clients.patronymic AS client_patronymic, clients.birthday AS client_birthday, mydb.abonement_statuses.name AS status_type,
+    const sql = `SELECT abonements.*, clients.client_id AS client_id, clients.name AS client_name, clients.surname AS client_surname, clients.patronymic AS client_patronymic, clients.birthday AS client_birthday, clients.gender AS client_gender, mydb.abonement_statuses.name AS status_type,
     relatives.relative_id,
     relatives.name AS relative_name,
     relatives.surname AS relative_surname,
@@ -128,6 +128,11 @@ class AbonementsModel {
       connection = await poolPromise.getConnection();
       await connection.beginTransaction();
 
+      const isNoNewClients = !familyData.family.clients.length;
+
+      if (isNoNewClients) {
+        return;
+      }
       // Создаем клиентов
       const clientIds = [];
       for (const client of familyData.family.clients) {
@@ -307,9 +312,8 @@ class AbonementsModel {
 
       // В конце добавляем новых клиентов
       createdClientIds = await this._addNewClients(familyData, user, execute, sqlQueries);
-
       // Добавляем новых родственников
-      createdRelativeIds = await this._addNewRelatives(familyData, user, execute, sqlQueries);
+      createdRelativeIds = await this._addNewRelatives(familyData, user, execute, sqlQueries, createdClientIds);
 
       await connection.commit();
 
@@ -328,13 +332,19 @@ class AbonementsModel {
   async _handleClientDeletions(familyData, execute, sqlQueries) {
     const { clients } = familyData.family;
 
-    // Если нет клиентов или все клиенты новые, пропускаем
-    if (!clients?.length || clients.every((client) => client.is_new)) {
+    // Если нет клиентов, пропускаем
+    if (!clients?.length) {
       return;
     }
 
     // Находим существующего клиента для получения ID абонемента
-    const existingClient = clients.find((client) => !client.is_new);
+    const existingClient = clients.find((client) => client.id);
+
+    // Если нет существующих клиентов, значит все клиенты новые - нечего удалять
+    if (!existingClient) {
+      return;
+    }
+
     const [currentFamilyRows] = await execute(sqlQueries.getFamilyClients, [existingClient.id]);
 
     if (!currentFamilyRows?.length) {
@@ -350,7 +360,7 @@ class AbonementsModel {
     for (const clientId of clientsToDelete) {
       await Promise.all([
         execute(sqlQueries.deleteAbonementClient, [clientId]),
-        execute(sqlQueries.deleteClientRelative, [clientId]),
+        execute(sqlQueries.deleteClientRelative, [clientId, null]),
         execute(sqlQueries.deleteClient, [clientId]),
       ]);
     }
@@ -377,6 +387,7 @@ class AbonementsModel {
 
   _checkClientChanges(current, client) {
     return ['surname', 'name', 'patronymic', 'gender', 'birthday'].some((field) => {
+      console.log('field', field);
       const currentValue = current[field];
       const newValue = client[field];
 
@@ -385,7 +396,12 @@ class AbonementsModel {
       }
 
       if (field === 'gender') {
-        return Number(currentValue) !== Number(newValue);
+        const currentGender = currentValue;
+        const newGender = newValue;
+
+        console.log('currentGender', currentGender, 'newGender', newGender);
+
+        return currentGender !== newGender;
       }
 
       return currentValue !== newValue;
@@ -417,6 +433,7 @@ class AbonementsModel {
 
   async _updateClientData(client, execute, sqlQueries) {
     try {
+      console.log('Обновление данных клиента. Пол:', client.gender, 'Тип:', typeof client.gender);
       await execute(sqlQueries.updateClient, [
         client.surname,
         client.name,
@@ -436,12 +453,13 @@ class AbonementsModel {
       return [];
     }
 
-    const newClients = familyData.family.clients.filter((client) => client.is_new);
+    const newClients = familyData.family.clients.filter((client) => !client.id);
     if (!newClients.length) {
       return [];
     }
 
-    const existingClient = familyData.family.clients.find((client) => !client.is_new);
+    // Находим существующего клиента для получения ID абонемента
+    const existingClient = familyData.family.clients.find((client) => client.id);
     let abonementId = null;
     const createdClientIds = [];
 
@@ -457,6 +475,14 @@ class AbonementsModel {
 
     for (const client of newClients) {
       try {
+        console.log('Добавление нового клиента:', {
+          surname: client.surname,
+          name: client.name,
+          patronymic: client.patronymic,
+          gender: client.gender,
+          birthday: client.birthday,
+        });
+
         const [result] = await execute(sqlQueries.addClient, [
           client.surname,
           client.name,
@@ -470,8 +496,9 @@ class AbonementsModel {
         const newClientId = result.insertId;
         createdClientIds.push(newClientId);
 
+        // Если есть существующий абонемент, связываем с ним нового клиента
         if (abonementId) {
-          const [result] = await execute(sqlQueries.linkClientToAbonement, [abonementId, newClientId]);
+          await execute(sqlQueries.linkClientToAbonement, [abonementId, newClientId]);
         }
       } catch (error) {
         console.error('Ошибка при добавлении нового клиента:', error);
@@ -527,11 +554,11 @@ class AbonementsModel {
   async _handleRelativeDeletions(familyData, execute, sqlQueries) {
     const { relatives } = familyData.family;
 
-    if (!relatives?.length || relatives.every((relative) => relative.is_new)) {
+    if (!relatives?.length) {
       return;
     }
 
-    const existingRelative = relatives.find((relative) => !relative.is_new);
+    const existingRelative = relatives.find((relative) => relative.id);
     if (!existingRelative) return;
 
     const [currentFamilyRows] = await execute(sqlQueries.getFamilyRelatives, [existingRelative.id]);
@@ -545,9 +572,9 @@ class AbonementsModel {
 
     // Получаем список ID родственников из обновленных данных
     const newRelativeIds = relatives
-      .filter((relative) => !relative.is_new)
+      .filter((relative) => relative.id)
       .map((relative) => Number(relative.id))
-      .filter((id) => id && !isNaN(id)); // Улучшенная фильтрация ID
+      .filter((id) => id && !isNaN(id));
 
     // Находим ID родственников, которых нужно удалить
     const relativesToDelete = currentRelativeIds.filter((id) => !newRelativeIds.includes(id));
@@ -562,13 +589,16 @@ class AbonementsModel {
     }
   }
 
-  async _addNewRelatives(familyData, user, execute, sqlQueries) {
+  async _addNewRelatives(familyData, user, execute, sqlQueries, createdClientIds = []) {
     const { relatives } = familyData.family;
     const { clients } = familyData.family;
     const createdRelativeIds = [];
 
+    // Создаем список существующих ID клиентов и недавно созданных
+    const allClientIds = [...clients.filter((client) => client.id).map((client) => client.id), ...createdClientIds];
+
     for (const relative of relatives) {
-      if (!relative.is_new) continue;
+      if (relative.id) continue;
 
       const [result] = await execute(sqlQueries.addRelative, [
         relative.surname,
@@ -592,8 +622,7 @@ class AbonementsModel {
       }
 
       // Связываем родственника со всеми клиентами семьи
-      for (const client of clients) {
-        const clientId = client.is_new ? client.id : client.id;
+      for (const clientId of allClientIds) {
         if (clientId) {
           await execute(sqlQueries.linkClientToRelative, [clientId, newRelativeId]);
         }
