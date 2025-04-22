@@ -17,9 +17,13 @@ class Abonement {
       rawFamily.relatives = JSON.parse(family.relatives);
       rawFamily.abonements = JSON.parse(family.abonements);
 
+      console.log('rawFamily ---', rawFamily.clients);
+
       const safeFamily = this._getSafeFamily(rawFamily);
 
       this.family = safeFamily;
+      console.log('safeFamily ---', safeFamily);
+      console.log('rawFamily ---', rawFamily);
     }
 
     if (params) {
@@ -56,7 +60,11 @@ class Abonement {
       const escapedObj = {};
       for (const key in obj) {
         if (obj.hasOwnProperty(key)) {
-          escapedObj[key] = escapeHtml(obj[key]);
+          if (key === 'gender') {
+            escapedObj[key] = Number(escapeHtml(obj[key]));
+          } else {
+            escapedObj[key] = escapeHtml(obj[key]);
+          }
         }
       }
       return escapedObj;
@@ -79,6 +87,8 @@ class Abonement {
         }
       }
     }
+
+    console.log('safeFamily ---', safeFamily);
 
     return safeFamily;
   }
