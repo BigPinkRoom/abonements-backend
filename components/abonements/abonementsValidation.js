@@ -3,11 +3,6 @@ const { abonementsConstants } = require('./constants');
 const helpersDate = require('../../helpers/helpersDate');
 const Abonement = require('./abonement');
 
-// const formatDateToMySQL = (dateString) => {
-//   const [day, month, year] = dateString.split('.');
-//   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-// };
-
 class AbonementValidation {
   abonementMiddleware(schema) {
     return async (req, res, next) => {
@@ -105,7 +100,7 @@ class AbonementValidation {
           .required()
           .items(
             Joi.object({
-              id: Joi.number().min(1).max(999999).required(),
+              id: Joi.number().min(1).max(999999),
               name: Joi.string().min(1).max(150).required(),
               surname: Joi.string().min(1).max(150).required(),
               patronymic: Joi.string().min(1).max(150).required(),
@@ -138,20 +133,18 @@ class AbonementValidation {
               gender: Joi.number()
                 .required()
                 .valid(...abonementsConstants.GENDER_TYPES),
-              is_new: Joi.boolean().optional(),
             })
           ),
         relatives: Joi.array()
           .required()
           .items(
             Joi.object({
-              id: Joi.number().min(1).max(999999).required(),
+              id: Joi.number().min(1).max(999999),
               name: Joi.string().min(1).max(150).required(),
               surname: Joi.string().min(1).max(150).required(),
               patronymic: Joi.string().min(1).max(150).required(),
               relative_type_id: Joi.number().min(1).max(20).required(),
               telephone: Joi.string().required(),
-              is_new: Joi.boolean().optional(),
             })
           ),
         abonements: Joi.object({
@@ -204,7 +197,6 @@ class AbonementValidation {
                 'date.range': 'Дата рождения должна быть между 01.01.2000 и текущей датой',
               }),
             gender: Joi.number().valid(...abonementsConstants.GENDER_TYPES),
-            is_new: Joi.boolean().optional(),
           })
         ),
         relatives: Joi.array().items(
@@ -215,7 +207,6 @@ class AbonementValidation {
             patronymic: Joi.string().min(1).max(150),
             relative_type_id: Joi.number().min(1).max(20),
             telephone: Joi.string(),
-            is_new: Joi.boolean().optional(),
           })
         ),
         abonements: Joi.object({
