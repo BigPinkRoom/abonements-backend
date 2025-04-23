@@ -31,10 +31,12 @@ class AbonementsController {
 
   async updateFamily(req, res, next) {
     try {
+      console.log('Данные семьи, полученные от фронтенда:', JSON.stringify(res.locals.familyData, null, 2));
+
       const family = await abonementsDAL.updateFamily(res.locals.familyData, req.user);
       res.status(200).json(family);
     } catch (error) {
-      console.log('controller add family get error', error);
+      console.log('controller update family error', error);
 
       res.status(500).json({ error: { message: error } });
       next(error);

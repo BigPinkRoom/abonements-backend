@@ -279,7 +279,8 @@ class AbonementsModel {
       deleteRelative: `DELETE FROM relatives WHERE relative_id = ?`,
       deleteTelephone: `DELETE FROM telephone_numbers WHERE relative_id = ?`,
       deleteAbonementClient: `DELETE FROM abonements_clients WHERE abcl_client_id = ?`,
-      deleteClientRelative: `DELETE FROM clients_relatives WHERE clrl_client_id = ? OR clrl_relative_id = ?`,
+      deleteClientRelative: `DELETE FROM clients_relatives WHERE clrl_relative_id = ?`,
+      deleteClientRelationship: `DELETE FROM clients_relatives WHERE clrl_client_id = ?`,
     };
 
     let poolPromise = null;
@@ -334,6 +335,7 @@ class AbonementsModel {
 
     // Если нет клиентов, пропускаем
     if (!clients?.length) {
+      console.log('Нет клиентов для обработки');
       return;
     }
 
@@ -342,27 +344,50 @@ class AbonementsModel {
 
     // Если нет существующих клиентов, значит все клиенты новые - нечего удалять
     if (!existingClient) {
+      console.log('Не найдено существующих клиентов');
       return;
     }
 
+    console.log('Поиск клиентов семьи для клиента ID:', existingClient.id);
     const [currentFamilyRows] = await execute(sqlQueries.getFamilyClients, [existingClient.id]);
 
     if (!currentFamilyRows?.length) {
+      console.log('Не найдено клиентов для семьи');
       return;
     }
 
     // Получаем ID клиентов для сравнения
     const currentFamilyIds = currentFamilyRows.map((row) => row.client_id);
+    console.log('Текущие ID клиентов:', currentFamilyIds);
+
     const newFamilyIds = clients.map((client) => Number(client.id)).filter(Boolean);
+    console.log('Новые ID клиентов:', newFamilyIds);
+
     const clientsToDelete = currentFamilyIds.filter((id) => !newFamilyIds.includes(id));
+    console.log('ID клиентов для удаления:', clientsToDelete);
 
     // Удаляем клиентов, которых больше нет в семье
     for (const clientId of clientsToDelete) {
-      await Promise.all([
-        execute(sqlQueries.deleteAbonementClient, [clientId]),
-        execute(sqlQueries.deleteClientRelative, [clientId, null]),
-        execute(sqlQueries.deleteClient, [clientId]),
-      ]);
+      console.log('Удаление клиента ID:', clientId);
+
+      try {
+        // Сначала удаляем связь с абонементом
+        console.log('Удаление связи клиента с абонементом...');
+        await execute(sqlQueries.deleteAbonementClient, [clientId]);
+
+        // Затем удаляем все связи с родственниками
+        console.log('Удаление связей клиента с родственниками...');
+        await execute('DELETE FROM clients_relatives WHERE clrl_client_id = ?', [clientId]);
+
+        // И наконец, удаляем самого клиента
+        console.log('Удаление записи клиента...');
+        await execute(sqlQueries.deleteClient, [clientId]);
+
+        console.log('Клиент и все его связи успешно удалены');
+      } catch (error) {
+        console.error('Ошибка при удалении клиента:', error);
+        throw error;
+      }
     }
   }
 
@@ -555,37 +580,61 @@ class AbonementsModel {
     const { relatives } = familyData.family;
 
     if (!relatives?.length) {
+      console.log('Нет родственников для обработки');
       return;
     }
 
-    const existingRelative = relatives.find((relative) => relative.id);
-    if (!existingRelative) return;
+    const existingClient = familyData.family.clients.find((client) => client.id);
+    if (!existingClient) {
+      console.log('Не найдено существующих клиентов');
+      return;
+    }
 
-    const [currentFamilyRows] = await execute(sqlQueries.getFamilyRelatives, [existingRelative.id]);
+    console.log('Поиск родственников семьи для клиента ID:', existingClient.id);
+    const [currentFamilyRows] = await execute(sqlQueries.getFamilyRelatives, [existingClient.id]);
 
     if (!currentFamilyRows?.length) {
+      console.log('Не найдено родственников для семьи');
       return;
     }
 
     // Получаем список ID существующих родственников
     const currentRelativeIds = currentFamilyRows.map((row) => row.relative_id);
+    console.log('Текущие ID родственников:', currentRelativeIds);
 
     // Получаем список ID родственников из обновленных данных
     const newRelativeIds = relatives
       .filter((relative) => relative.id)
       .map((relative) => Number(relative.id))
       .filter((id) => id && !isNaN(id));
+    console.log('Новые ID родственников:', newRelativeIds);
 
     // Находим ID родственников, которых нужно удалить
     const relativesToDelete = currentRelativeIds.filter((id) => !newRelativeIds.includes(id));
+    console.log('ID родственников для удаления:', relativesToDelete);
 
     // Удаляем родственников и связанные с ними данные
     for (const relativeId of relativesToDelete) {
-      await Promise.all([
-        execute(sqlQueries.deleteTelephone, [relativeId]),
-        execute(sqlQueries.deleteClientRelative, [null, relativeId]),
-        execute(sqlQueries.deleteRelative, [relativeId]),
-      ]);
+      console.log('Удаление родственника ID:', relativeId);
+
+      try {
+        // Сначала удаляем телефоны
+        console.log('Удаление телефонов родственника...');
+        await execute(sqlQueries.deleteTelephone, [relativeId]);
+
+        // Затем удаляем все связи с клиентами в таблице clients_relatives
+        console.log('Удаление связей родственника с клиентами...');
+        await execute('DELETE FROM clients_relatives WHERE clrl_relative_id = ?', [relativeId]);
+
+        // И наконец, удаляем самого родственника
+        console.log('Удаление записи родственника...');
+        await execute(sqlQueries.deleteRelative, [relativeId]);
+
+        console.log('Родственник и все его связи успешно удалены');
+      } catch (error) {
+        console.error('Ошибка при удалении родственника:', error);
+        throw error;
+      }
     }
   }
 
@@ -594,11 +643,28 @@ class AbonementsModel {
     const { clients } = familyData.family;
     const createdRelativeIds = [];
 
+    console.log('Обработка новых родственников. Получено родственников:', relatives?.length || 0);
+
+    if (!relatives?.length) {
+      console.log('Нет родственников для добавления');
+      return createdRelativeIds;
+    }
+
+    // Фильтруем только новых родственников (без ID)
+    const newRelatives = relatives.filter((relative) => !relative.id);
+    console.log('Новых родственников для добавления:', newRelatives.length);
+
+    if (!newRelatives.length) {
+      console.log('Нет новых родственников для добавления');
+      return createdRelativeIds;
+    }
+
     // Создаем список существующих ID клиентов и недавно созданных
     const allClientIds = [...clients.filter((client) => client.id).map((client) => client.id), ...createdClientIds];
+    console.log('Список ID клиентов для связи с родственниками:', allClientIds);
 
-    for (const relative of relatives) {
-      if (relative.id) continue;
+    for (const relative of newRelatives) {
+      console.log('Добавление нового родственника:', relative.name, relative.surname);
 
       const [result] = await execute(sqlQueries.addRelative, [
         relative.surname,
@@ -611,6 +677,7 @@ class AbonementsModel {
 
       const newRelativeId = result.insertId;
       createdRelativeIds.push(newRelativeId);
+      console.log('Создан новый родственник с ID:', newRelativeId);
 
       // Проверяем существование телефона перед добавлением
       const [existingTelephone] = await execute('SELECT telephone FROM telephone_numbers WHERE telephone = ?', [
@@ -619,16 +686,22 @@ class AbonementsModel {
 
       if (!existingTelephone.length) {
         await execute(sqlQueries.addTelephone, [relative.telephone, newRelativeId, user.branch]);
+        console.log('Добавлен телефон для родственника:', relative.telephone);
+      } else {
+        console.log('Телефон уже существует в базе, пропуск добавления');
       }
 
       // Связываем родственника со всеми клиентами семьи
+      console.log('Связывание родственника с клиентами...');
       for (const clientId of allClientIds) {
         if (clientId) {
           await execute(sqlQueries.linkClientToRelative, [clientId, newRelativeId]);
+          console.log('Родственник связан с клиентом ID:', clientId);
         }
       }
     }
 
+    console.log('Завершено добавление новых родственников. Создано:', createdRelativeIds.length);
     return createdRelativeIds;
   }
 }
