@@ -24,7 +24,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 const corsOptions = {
-  origin: 'http://localhost:3000',
+  origin: ['http://localhost:3000', 'http://89.169.0.139:3000'],
   optionsSuccessStatus: 200,
   credentials: true,
 };
