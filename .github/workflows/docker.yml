@@ -17,7 +17,7 @@ jobs:
       # 2. Логин в Docker Hub (если используется)
       - name: Log in to Docker Hub
         if: github.ref == 'refs/heads/develop' # Условие: только для ветки dev
-        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+        run: echo "123${{ secrets.DOCKER_PASSWORD }}" | docker login -u "456${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
       # 3. Сборка Docker-образа
       - name: Build Docker image
