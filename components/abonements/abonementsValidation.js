@@ -148,10 +148,10 @@ class AbonementValidation {
             })
           ),
         abonements: Joi.object({
-          duration: Joi.string().required(),
-          quantity: Joi.string().required(),
-          activation_date: Joi.date().min(today).required(),
-        }).required(),
+          duration: Joi.string().optional(),
+          quantity: Joi.string().optional(),
+          activation_date: Joi.date().min(today).optional(),
+        }).optional(),
       }),
     });
     return schema;

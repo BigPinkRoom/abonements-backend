@@ -84,8 +84,36 @@ class AbonementsModel {
       throw new Error('Необходимые параметры не предоставлены');
     }
 
-    if (!familyData.family || !familyData.family.clients || !familyData.family.relatives) {
-      throw new Error('Некорректная структура данных семьи');
+    if (!familyData.family) {
+      throw new Error('Некорректная структура данных семьи: отсутствует объект family');
+    }
+
+    // Инициализируем пустые массивы, если отсутствуют
+    familyData.family.clients = familyData.family.clients || [];
+    familyData.family.relatives = familyData.family.relatives || [];
+    familyData.family.abonements = familyData.family.abonements || {};
+
+    // Проверяем, есть ли родственники
+    const hasRelatives = familyData.family.relatives && familyData.family.relatives.length > 0;
+
+    // Проверяем, есть ли клиенты
+    const hasClients = familyData.family.clients && familyData.family.clients.length > 0;
+
+    // Проверяем, заполнен ли объект абонемента
+    const hasAbonementData =
+      familyData.family.abonements &&
+      (familyData.family.abonements.quantity ||
+        familyData.family.abonements.activation_date ||
+        familyData.family.abonements.duration);
+
+    // Если нет родственников, но есть клиенты - ошибка
+    if (!hasRelatives && hasClients) {
+      throw new Error('Невозможно создать клиента без родственника');
+    }
+
+    // Если нет ни клиентов, ни родственников - также ошибка
+    if (!hasClients && !hasRelatives) {
+      throw new Error('Необходимо указать хотя бы одного клиента и родственника');
     }
 
     const sqlClient = `
@@ -128,6 +156,22 @@ class AbonementsModel {
       connection = await poolPromise.getConnection();
       await connection.beginTransaction();
 
+      // Функция для безопасной обработки параметров запроса (undefined -> null)
+      const safeSqlParams = (params) => {
+        return params.map((param) => (param === undefined ? null : param));
+      };
+
+      // Обертка для execute с безопасной обработкой параметров
+      const safeExecute = async (sql, params) => {
+        return await poolPromise.execute(sql, safeSqlParams(params));
+      };
+
+      const execute = async (sql, params) => await safeExecute(sql, params);
+      const getCurrentData = async (sql, id) => {
+        const [rows] = await execute(sql, [id]);
+        return rows[0];
+      };
+
       const isNoNewClients = !familyData.family.clients.length;
 
       if (isNoNewClients) {
@@ -136,7 +180,7 @@ class AbonementsModel {
       // Создаем клиентов
       const clientIds = [];
       for (const client of familyData.family.clients) {
-        const clientResult = await poolPromise.execute(sqlClient, [
+        const clientResult = await safeExecute(sqlClient, [
           client.surname,
           client.name,
           client.patronymic,
@@ -150,44 +194,59 @@ class AbonementsModel {
 
       // Создаем родственников и связываем их с клиентами
       const relativeIds = [];
-      for (const relative of familyData.family.relatives) {
-        const relativeResult = await poolPromise.execute(sqlRelative, [
-          relative.surname,
-          relative.name,
-          relative.patronymic,
-          relative.relative_type_id,
-          user.user_id,
-          user.branch,
-        ]);
+      if (familyData.family.relatives && familyData.family.relatives.length > 0) {
+        for (const relative of familyData.family.relatives) {
+          const relativeResult = await safeExecute(sqlRelative, [
+            relative.surname,
+            relative.name,
+            relative.patronymic,
+            relative.relative_type_id,
+            user.user_id,
+            user.branch,
+          ]);
 
-        const relativeId = relativeResult[0].insertId;
-        relativeIds.push(relativeId);
+          const relativeId = relativeResult[0].insertId;
+          relativeIds.push(relativeId);
 
-        // Добавляем телефон родственника
-        await poolPromise.execute(sqlTelephone, [relative.telephone, relativeId, user.branch]);
+          // Добавляем телефон родственника
+          await safeExecute(sqlTelephone, [relative.telephone, relativeId, user.branch]);
 
-        // Связываем родственника с каждым клиентом
-        for (const clientId of clientIds) {
-          await poolPromise.execute(sqlClientRelative, [clientId, relativeId]);
+          // Связываем родственника с каждым клиентом
+          for (const clientId of clientIds) {
+            await safeExecute(sqlClientRelative, [clientId, relativeId]);
+          }
         }
       }
 
-      // Создаем абонемент
-      const abonementResult = await poolPromise.execute(sqlAbonement, [
-        familyData.family.abonements.quantity,
-        familyData.family.abonements.quantity,
-        familyData.family.abonements.activation_date,
-        familyData.family.abonements.activation_date,
-        familyData.family.abonements.duration,
-        user.user_id,
-        1,
-        user.branch,
-      ]);
+      // Получаем текущую дату в формате YYYY-MM-DD
+      const getCurrentDate = () => {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
 
-      const abonementId = abonementResult[0].insertId;
+      // Создаем абонемент только если есть данные абонемента
+      let abonementId = null;
+      if (hasAbonementData) {
+        const abonementResult = await safeExecute(sqlAbonement, [
+          familyData.family.abonements?.quantity || 0,
+          familyData.family.abonements?.quantity || 0,
+          familyData.family.abonements?.activation_date || getCurrentDate(),
+          familyData.family.abonements?.activation_date || getCurrentDate(),
+          familyData.family.abonements?.duration || 30,
+          user.user_id,
+          1,
+          user.branch,
+        ]);
 
-      for (const clientId of clientIds) {
-        await poolPromise.execute(sqlAbonementsClients, [abonementId, clientId]);
+        abonementId = abonementResult[0].insertId;
+
+        // Связываем клиентов с абонементом только если абонемент был создан
+        for (const clientId of clientIds) {
+          await safeExecute(sqlAbonementsClients, [abonementId, clientId]);
+        }
       }
 
       await connection.commit();
@@ -293,11 +352,32 @@ class AbonementsModel {
       connection = await poolPromise.getConnection();
       await connection.beginTransaction();
 
-      const execute = async (sql, params) => await poolPromise.execute(sql, params);
+      // Функция для безопасной обработки параметров запроса (undefined -> null)
+      const safeSqlParams = (params) => {
+        return params.map((param) => (param === undefined ? null : param));
+      };
+
+      // Обертка для execute с безопасной обработкой параметров
+      const safeExecute = async (sql, params) => {
+        return await poolPromise.execute(sql, safeSqlParams(params));
+      };
+
+      const execute = async (sql, params) => await safeExecute(sql, params);
       const getCurrentData = async (sql, id) => {
         const [rows] = await execute(sql, [id]);
         return rows[0];
       };
+
+      // Проверяем, есть ли родственники
+      const hasRelatives = familyData.family.relatives && familyData.family.relatives.length > 0;
+
+      // Проверяем, есть ли клиенты
+      const hasClients = familyData.family.clients && familyData.family.clients.length > 0;
+
+      // Если после обновления не останется родственников, но останутся клиенты - ошибка
+      if (!hasRelatives && hasClients) {
+        throw new Error('Невозможно оставить клиента без родственника');
+      }
 
       // Сначала обновляем существующих клиентов
       await this._updateExistingClients(familyData, execute, getCurrentData, sqlQueries);
@@ -459,14 +539,15 @@ class AbonementsModel {
   async _updateClientData(client, execute, sqlQueries) {
     try {
       console.log('Обновление данных клиента. Пол:', client.gender, 'Тип:', typeof client.gender);
-      await execute(sqlQueries.updateClient, [
-        client.surname,
-        client.name,
-        client.patronymic,
-        client.gender,
-        client.birthday,
-        client.id,
-      ]);
+
+      // Преобразуем undefined значения в null для SQL
+      const surname = client.surname === undefined ? null : client.surname;
+      const name = client.name === undefined ? null : client.name;
+      const patronymic = client.patronymic === undefined ? null : client.patronymic;
+      const gender = client.gender === undefined ? null : client.gender;
+      const birthday = client.birthday === undefined ? null : client.birthday;
+
+      await execute(sqlQueries.updateClient, [surname, name, patronymic, gender, birthday, client.id]);
     } catch (error) {
       console.error('Ошибка при обновлении клиента:', error);
       throw error;
@@ -481,6 +562,12 @@ class AbonementsModel {
     const newClients = familyData.family.clients.filter((client) => !client.id);
     if (!newClients.length) {
       return [];
+    }
+
+    // Проверяем, есть ли родственники в семье
+    const hasRelatives = familyData.family.relatives && familyData.family.relatives.length > 0;
+    if (!hasRelatives) {
+      throw new Error('Невозможно добавить клиента без родственника');
     }
 
     // Находим существующего клиента для получения ID абонемента
@@ -508,12 +595,19 @@ class AbonementsModel {
           birthday: client.birthday,
         });
 
+        // Преобразуем undefined значения в null для SQL
+        const surname = client.surname === undefined ? null : client.surname;
+        const name = client.name === undefined ? null : client.name;
+        const patronymic = client.patronymic === undefined ? null : client.patronymic;
+        const gender = client.gender === undefined ? null : client.gender;
+        const birthday = client.birthday === undefined ? null : client.birthday;
+
         const [result] = await execute(sqlQueries.addClient, [
-          client.surname,
-          client.name,
-          client.patronymic,
-          client.gender,
-          client.birthday,
+          surname,
+          name,
+          patronymic,
+          gender,
+          birthday,
           user.user_id,
           user.branch,
         ]);
@@ -563,13 +657,13 @@ class AbonementsModel {
 
   async _updateRelativeData(relative, execute, sqlQueries) {
     try {
-      await execute(sqlQueries.updateRelative, [
-        relative.surname,
-        relative.name,
-        relative.patronymic,
-        relative.relative_type_id,
-        relative.id,
-      ]);
+      // Преобразуем undefined значения в null для SQL
+      const surname = relative.surname === undefined ? null : relative.surname;
+      const name = relative.name === undefined ? null : relative.name;
+      const patronymic = relative.patronymic === undefined ? null : relative.patronymic;
+      const relative_type_id = relative.relative_type_id === undefined ? null : relative.relative_type_id;
+
+      await execute(sqlQueries.updateRelative, [surname, name, patronymic, relative_type_id, relative.id]);
     } catch (error) {
       console.error('Ошибка при обновлении родственника:', error);
       throw error;
@@ -604,7 +698,7 @@ class AbonementsModel {
 
     // Получаем список ID родственников из обновленных данных
     const newRelativeIds = relatives
-      .filter((relative) => relative.id)
+      .filter((relative) => relative.id && relative.id !== undefined)
       .map((relative) => Number(relative.id))
       .filter((id) => id && !isNaN(id));
     console.log('Новые ID родственников:', newRelativeIds);
@@ -660,17 +754,27 @@ class AbonementsModel {
     }
 
     // Создаем список существующих ID клиентов и недавно созданных
-    const allClientIds = [...clients.filter((client) => client.id).map((client) => client.id), ...createdClientIds];
+    const allClientIds = [
+      ...clients.filter((client) => client.id && client.id !== undefined).map((client) => client.id),
+      ...createdClientIds,
+    ];
     console.log('Список ID клиентов для связи с родственниками:', allClientIds);
 
     for (const relative of newRelatives) {
       console.log('Добавление нового родственника:', relative.name, relative.surname);
 
+      // Преобразуем undefined значения в null для SQL
+      const surname = relative.surname === undefined ? null : relative.surname;
+      const name = relative.name === undefined ? null : relative.name;
+      const patronymic = relative.patronymic === undefined ? null : relative.patronymic;
+      const relative_type_id = relative.relative_type_id === undefined ? null : relative.relative_type_id;
+      const telephone = relative.telephone === undefined ? null : relative.telephone;
+
       const [result] = await execute(sqlQueries.addRelative, [
-        relative.surname,
-        relative.name,
-        relative.patronymic,
-        relative.relative_type_id,
+        surname,
+        name,
+        patronymic,
+        relative_type_id,
         user.user_id,
         user.branch,
       ]);
@@ -680,15 +784,17 @@ class AbonementsModel {
       console.log('Создан новый родственник с ID:', newRelativeId);
 
       // Проверяем существование телефона перед добавлением
-      const [existingTelephone] = await execute('SELECT telephone FROM telephone_numbers WHERE telephone = ?', [
-        relative.telephone,
-      ]);
+      if (telephone) {
+        const [existingTelephone] = await execute('SELECT telephone FROM telephone_numbers WHERE telephone = ?', [
+          telephone,
+        ]);
 
-      if (!existingTelephone.length) {
-        await execute(sqlQueries.addTelephone, [relative.telephone, newRelativeId, user.branch]);
-        console.log('Добавлен телефон для родственника:', relative.telephone);
-      } else {
-        console.log('Телефон уже существует в базе, пропуск добавления');
+        if (!existingTelephone.length) {
+          await execute(sqlQueries.addTelephone, [telephone, newRelativeId, user.branch]);
+          console.log('Добавлен телефон для родственника:', telephone);
+        } else {
+          console.log('Телефон уже существует в базе, пропуск добавления');
+        }
       }
 
       // Связываем родственника со всеми клиентами семьи

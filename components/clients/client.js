@@ -1,7 +1,7 @@
 const escapeHtml = require('escape-html');
 
 class Client {
-  constructor({ clients = null, relatives = null, telephones = null, params = null }) {
+  constructor({ clients = null, relatives = null, telephones = null, search = null, params = null }) {
     if (clients && Array.isArray(clients)) {
       this.clients = clients.map((client) => {
         return {
@@ -27,6 +27,14 @@ class Client {
           telephone: escapeHtml(telephone),
         };
       });
+    }
+
+    if (search) {
+      this.search = search;
+
+      return {
+        search: escapeHtml(search),
+      };
     }
   }
 }

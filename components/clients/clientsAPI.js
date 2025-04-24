@@ -18,4 +18,10 @@ router.post(
   controller.get
 );
 
+router.post(
+  '/search-family',
+  commonController.checkAccess(['employee', 'admin']),
+  validation.clientMiddleware(validation.searchFamilySchema()),
+  controller.searchFamily
+);
 module.exports = router;

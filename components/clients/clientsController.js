@@ -16,11 +16,24 @@ class ClientsController {
 
   async add(req, res, next) {
     try {
-      const result = clientsDal.addClients(res.locals.clientsData)
+      const result = clientsDal.addClients(res.locals.clientsData);
 
-      res.status(200).json(result)
+      res.status(200).json(result);
     } catch (error) {
       console.log('controller client add error', error);
+
+      res.status(500).json({ error: { message: error } });
+      next(error);
+    }
+  }
+
+  async searchFamily(req, res, next) {
+    try {
+      const result = clientsDal.searchFamily(res.locals.searchData);
+
+      res.status(200).json(result);
+    } catch (error) {
+      console.log('controller client search error', error);
 
       res.status(500).json({ error: { message: error } });
       next(error);
