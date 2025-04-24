@@ -1,0 +1,29 @@
+name: Build and Push Backend (Abonements-backend) Docker Image
+
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Клонирование репозитория
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. Логин в Docker Hub (если используется)
+      - name: Log in to Docker Hub
+        if: github.ref == 'refs/heads/dev' # Условие: только для ветки dev
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      # 3. Сборка Docker-образа
+      - name: Build Docker image
+        run: docker build -t repertuar/backend-app:latest .
+
+      # 4. Публикация Docker-образа в Docker Hub (опционально)
+      - name: Push Docker image
+        if: github.ref == 'refs/heads/dev' # Условие: только для ветки dev
+        run: docker push repertuar/backend-app:latest
