@@ -1,4 +1,4 @@
-name: Build and Push Backend (Abonements-backend) Docker Image
+name: Build and Push Backend Docker Image
 
 on:
   push:
@@ -10,18 +10,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Клонирование репозитория
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 2. Логин в Docker Hub
       - name: Log in to Docker Hub
-        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          if [ -z "$DOCKER_USERNAME" ] || [ -z "$DOCKER_PASSWORD" ]; then
+            echo "Error: Docker credentials not provided"
+            exit 1
+          fi
+          echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
 
-      # 3. Сборка Docker-образа
       - name: Build Docker image
-        run: docker build -t repertuar/backend-app:latest .
+        run: |
+          docker build -t repertuar/backend-app:latest .
+          docker tag repertuar/backend-app:latest repertuar/backend-app:${GITHUB_SHA:0:7}
 
-      # 4. Публикация Docker-образа в Docker Hub
       - name: Push Docker image
-        run: docker push repertuar/backend-app:latest
+        run: |
+          docker push repertuar/backend-app:latest
+          docker push repertuar/backend-app:${GITHUB_SHA:0:7}
