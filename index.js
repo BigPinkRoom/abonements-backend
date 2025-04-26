@@ -25,6 +25,7 @@ app.use(limiter);
 
 const corsOptions = {
   origin: ['http://localhost:3000', 'http://89.169.0.139:3000', 'http://frontend:3000', 'http://frontend:80'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
   optionsSuccessStatus: 200,
   credentials: true,
 };
