@@ -1,6 +1,7 @@
 const pool = require('../../pool.db').getPool();
 const abonementsService = require('./abonementsService');
 const helpersDAL = require('../../helpers/helpersDAL');
+const { addToIndex } = require('../search/searchService');
 
 class AbonementsModel {
   async getAbonementsEvents({ filters = {}, sortings = [] }) {
@@ -120,33 +121,33 @@ class AbonementsModel {
     INSERT INTO clients (
       surname, name, patronymic, gender, birthday, date_create, user_created_id, branch_id
     ) VALUES (?, ?, ?, ?, STR_TO_DATE(?, '%d.%m.%Y'), NOW(), ?, ?)
-  `;
+   `;
     const sqlRelative = `
     INSERT INTO relatives (
       surname, name, patronymic, relative_type_id, date_create, user_created_id, branch_id
     ) VALUES (?, ?, ?, ?, NOW(), ?, ?);
-  `;
+   `;
     const sqlTelephone = `
     INSERT INTO telephone_numbers (
       telephone, relative_id, branch_id
     ) VALUES (?, ?, ?);
-  `;
+   `;
     const sqlClientRelative = `
     INSERT INTO clients_relatives (
       clrl_client_id, clrl_relative_id
     ) VALUES (?, ?);
-  `;
+   `;
     const sqlAbonement = `
     INSERT INTO abonements (
       visits_quantity, visits_left, date_create, date_start, date_end, user_created_id, status_id, branch_id
     ) VALUES (?, ?, NOW(), STR_TO_DATE(?, '%Y-%m-%d'), DATE_ADD(STR_TO_DATE(?, '%Y-%m-%d'), INTERVAL ? DAY), ?, ?, ?);
-  `;
+   `;
 
     const sqlAbonementsClients = `
       INSERT INTO abonements_clients (
       abcl_abonement_id, abcl_client_id
     ) VALUES (?, ?);
-`;
+   `;
 
     let poolPromise = null;
     let connection = null;
@@ -611,6 +612,14 @@ class AbonementsModel {
           user.user_id,
           user.branch,
         ]);
+
+        addToIndex('clients', {
+          surname,
+          name,
+          patronymic,
+        });
+
+        console.log('ADD INDEX ! ! ! !  !! ! ! ');
 
         const newClientId = result.insertId;
         createdClientIds.push(newClientId);
