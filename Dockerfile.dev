@@ -10,4 +10,6 @@ COPY . .
 
 EXPOSE 4000
 
-CMD ["node", "index.js"]
+# CMD ["node", "index.js"]
+
+CMD ["sh", "-c", "while ! curl -s http://elasticsearch:9200; do sleep 5; done && node createIndexes.js && node index.js"]
