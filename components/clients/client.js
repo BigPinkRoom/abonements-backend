@@ -28,14 +28,6 @@ class Client {
         };
       });
     }
-
-    if (search) {
-      this.search = search;
-
-      return {
-        search: escapeHtml(search),
-      };
-    }
   }
 }
 

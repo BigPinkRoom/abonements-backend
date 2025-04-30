@@ -71,17 +71,6 @@ class ClientValidation {
 
     return schema;
   }
-
-  searchFamilySchema() {
-    const schema = Joi.object({
-      search: Joi.string()
-        .min(2)
-        .max(100)
-        .regex(/^[a-zA-Zа-яА-ЯёЁ0-9\-\.\+\ ]+$/),
-    });
-
-    return schema;
-  }
 }
 
 module.exports = new ClientValidation();

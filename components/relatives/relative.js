@@ -2,7 +2,6 @@ const escapeHtml = require('escape-html');
 
 class Relative {
   constructor(params = []) {
-    console.log('params of relative', params);
     if (params) {
       this.params = {};
 

@@ -17,13 +17,9 @@ class Abonement {
       rawFamily.relatives = JSON.parse(family.relatives);
       rawFamily.abonements = JSON.parse(family.abonements);
 
-      console.log('rawFamily ---', rawFamily.clients);
-
       const safeFamily = this._getSafeFamily(rawFamily);
 
       this.family = safeFamily;
-      console.log('safeFamily ---', safeFamily);
-      console.log('rawFamily ---', rawFamily);
     }
 
     if (params) {
@@ -87,8 +83,6 @@ class Abonement {
         }
       }
     }
-
-    console.log('safeFamily ---', safeFamily);
 
     return safeFamily;
   }

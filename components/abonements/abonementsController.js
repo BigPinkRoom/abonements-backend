@@ -20,6 +20,7 @@ class AbonementsController {
   async addFamily(req, res, next) {
     try {
       const family = await abonementsDAL.addFamily(res.locals.familyData, req.user);
+
       res.status(200).json(family);
     } catch (error) {
       console.log('controller add family get error', error);
