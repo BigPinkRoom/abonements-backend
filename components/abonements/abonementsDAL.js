@@ -1,7 +1,7 @@
 const pool = require('../../pool.db').getPool();
 const abonementsService = require('./abonementsService');
 const helpersDAL = require('../../helpers/helpersDAL');
-const { addToIndex } = require('../search/searchService');
+const searchDAL = require('../search/searchDAL');
 
 class AbonementsModel {
   async getAbonementsEvents({ filters = {}, sortings = [] }) {
@@ -190,11 +190,23 @@ class AbonementsModel {
           user.user_id,
           user.branch,
         ]);
-        clientIds.push(clientResult[0].insertId);
+
+        const clientId = clientResult[0].insertId;
+        clientIds.push(clientId);
+
+        // searchDAL.addToIndex('clients', {
+        //   client_id: clientId,
+        //   surname: client.surname,
+        //   name: client.name,
+        //   patronymic: client.patronymic,
+        // });
       }
 
       // Создаем родственников и связываем их с клиентами
       const relativeIds = [];
+
+      const relativesTelephones = [];
+
       if (familyData.family.relatives && familyData.family.relatives.length > 0) {
         for (const relative of familyData.family.relatives) {
           const relativeResult = await safeExecute(sqlRelative, [
@@ -211,6 +223,18 @@ class AbonementsModel {
 
           // Добавляем телефон родственника
           await safeExecute(sqlTelephone, [relative.telephone, relativeId, user.branch]);
+
+          const telephoneResult = await safeExecute(
+            'SELECT telephone_number_id FROM telephone_numbers WHERE relative_id = ? AND telephone = ?',
+            [relativeId, relative.telephone]
+          );
+
+          let telephoneId = null;
+          if (telephoneResult && telephoneResult[0] && telephoneResult[0].length > 0) {
+            telephoneId = telephoneResult[0][0].telephone_number_id;
+          }
+
+          relativesTelephones.push({ telephone: relative.telephone });
 
           // Связываем родственника с каждым клиентом
           for (const clientId of clientIds) {
@@ -249,6 +273,14 @@ class AbonementsModel {
           await safeExecute(sqlAbonementsClients, [abonementId, clientId]);
         }
       }
+
+      const clearClient = familyData.family.clients;
+      const clearRelative = familyData.family.relatives;
+
+      searchDAL.addToIndex('families', {
+        clients: clearClient,
+        relatives: clearRelative,
+      });
 
       await connection.commit();
     } catch (error) {
@@ -556,6 +588,7 @@ class AbonementsModel {
   }
 
   async _addNewClients(familyData, user, execute, sqlQueries) {
+    console.log('ADD INDEX BEFORE! ! ! !  !! ! ! ');
     if (!familyData?.family?.clients?.length) {
       return [];
     }
@@ -612,14 +645,6 @@ class AbonementsModel {
           user.user_id,
           user.branch,
         ]);
-
-        addToIndex('clients', {
-          surname,
-          name,
-          patronymic,
-        });
-
-        console.log('ADD INDEX ! ! ! !  !! ! ! ');
 
         const newClientId = result.insertId;
         createdClientIds.push(newClientId);
