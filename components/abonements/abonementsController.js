@@ -43,5 +43,24 @@ class AbonementsController {
       next(error);
     }
   }
+
+  async addAbonement(req, res, next) {
+    try {
+      const { abonements, clientIds } = req.body;
+      const user = req.user;
+
+      if (!Array.isArray(abonements) || !abonements.length || !Array.isArray(clientIds) || !clientIds.length) {
+        return res.status(400).json({ error: 'Необходимы данные абонементов и список клиентов' });
+      }
+
+      const abonementIds = await abonementsDAL.addAbonementForClients(abonements, clientIds, user);
+
+      console.log('abonementIds in controller', abonementIds);
+
+      res.status(201).json({ abonementIds });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
 }
 module.exports = new AbonementsController();
