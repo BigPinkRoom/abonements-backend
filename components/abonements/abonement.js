@@ -1,15 +1,15 @@
 const escapeHtml = require('escape-html');
 
 class Abonement {
-  constructor({ abonement = null, params = null, family = null }) {
-    if (abonement) {
-      this.abonement = {
+  constructor({ abonements = null, params = null, family = null }) {
+    if (Array.isArray(abonements)) {
+      this.abonements = abonements.map((abonement) => ({
         number: escapeHtml(abonement.number),
         visits_quantity: escapeHtml(abonement.visits_quantity),
         status: escapeHtml(abonement.status),
         date_start: escapeHtml(abonement.date_start),
         date_end: escapeHtml(abonement.date_end),
-      };
+      }));
     }
     if (family) {
       const rawFamily = {};
@@ -23,6 +23,7 @@ class Abonement {
     }
 
     if (params) {
+      console.log('params', params);
       this.params = {
         sortings: [],
         filters: {},
@@ -49,10 +50,10 @@ class Abonement {
     const safeFamily = {
       clients: [],
       relatives: [],
-      abonements: {},
+      abonements: [],
     };
 
-    const escapeObjectValues = (obj) => {
+    function escapeObjectValues(obj) {
       const escapedObj = {};
       for (const key in obj) {
         if (obj.hasOwnProperty(key)) {
@@ -64,7 +65,7 @@ class Abonement {
         }
       }
       return escapedObj;
-    };
+    }
 
     family.clients.forEach((client) => {
       safeFamily.clients.push(escapeObjectValues(client));
@@ -74,14 +75,14 @@ class Abonement {
       safeFamily.relatives.push(escapeObjectValues(relative));
     });
 
-    for (const key in family.abonements) {
-      if (family.abonements.hasOwnProperty(key)) {
-        if (typeof family.abonements[key] === 'object' && family.abonements[key] !== null) {
-          safeFamily.abonements[key] = escapeObjectValues(family.abonements[key]);
+    if (Array.isArray(family.abonements)) {
+      family.abonements.forEach((abonement) => {
+        if (typeof abonement === 'object' && abonement !== null) {
+          safeFamily.abonements.push(escapeObjectValues(abonement));
         } else {
-          safeFamily.abonements[key] = escapeHtml(family.abonements[key]);
+          safeFamily.abonements.push(escapeHtml(abonement));
         }
-      }
+      });
     }
 
     return safeFamily;
