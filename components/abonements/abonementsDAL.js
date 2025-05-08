@@ -4,9 +4,26 @@ const helpersDAL = require('../../helpers/helpersDAL');
 const searchDAL = require('../search/searchDAL');
 
 class AbonementsModel {
+  // Вспомогательный приватный метод для безопасной обработки SQL параметров
+  _safeSqlParams(params) {
+    return params.map((param) => (param === undefined ? null : param));
+  }
+
+  // Вспомогательный приватный метод для выполнения SQL запроса с безопасной обработкой параметров
+  async _safeExecute(sql, params, poolPromise) {
+    // Если poolPromise не передан, используем новый из пула
+    const currentPoolPromise = poolPromise || pool.promise();
+    try {
+      return await currentPoolPromise.execute(sql, this._safeSqlParams(params));
+    } finally {
+      // Если poolPromise был создан внутри этого метода, его не нужно освобождать здесь,
+      // это должно делаться в вызывающем коде, управляющем транзакцией или соединением.
+      // Если же poolPromise был передан, то также освобождение на стороне вызывающего.
+    }
+  }
+
   async getAbonementsEvents({ filters = {}, sortings = [] }) {
     const params = [];
-
     const sqlSorting = helpersDAL.createSortingString(sortings) || '';
     const sqlFilter = helpersDAL.createFilteringString(filters, 'mydb.abonements.date_create') || '';
 
@@ -15,8 +32,7 @@ class AbonementsModel {
     LEFT JOIN mydb.abonements_events ON mydb.abonements_events.abev_abonement_id = mydb.abonements.abonement_id
     LEFT JOIN mydb.events ON mydb.events.event_id = mydb.abonements_events.abev_event_id
     LEFT JOIN mydb.event_types ON mydb.event_types.event_type_id = mydb.events.event_type_id
-    WHERE mydb.events.event_id IS NOT NULL
-    ${sqlFilter} ${sqlSorting};`;
+    WHERE mydb.events.event_id IS NOT NULL`;
 
     let poolPromise = null;
 
@@ -42,7 +58,10 @@ class AbonementsModel {
     const params = [];
 
     const sqlSorting = helpersDAL.createSortingString(sortings) || '';
-    const sqlFilter = helpersDAL.createFilteringString(filters, 'mydb.abonements.date_create') || '';
+    const sqlFilter = helpersDAL.createFilteringString(filters, 'abonements.date_create') || '';
+
+    console.log('sqlFilter', sqlFilter);
+    console.log('sqlSorting', sqlSorting);
 
     const sql = `SELECT abonements.*, clients.client_id AS client_id, clients.name AS client_name, clients.surname AS client_surname, clients.patronymic AS client_patronymic, clients.birthday AS client_birthday, clients.gender AS client_gender, mydb.abonement_statuses.name AS status_type,
     relatives.relative_id,
@@ -60,13 +79,23 @@ class AbonementsModel {
     LEFT JOIN mydb.telephone_numbers ON mydb.telephone_numbers.relative_id = mydb.relatives.relative_id
     ${sqlFilter} ${sqlSorting};`;
 
+    console.log('Executing SQL:', sql);
+
     let poolPromise = null;
 
     try {
       poolPromise = pool.promise();
 
       const [rows, fields, error] = await poolPromise.execute(sql);
-      const result = rows;
+
+      const familyWithAbonements = await Promise.all(
+        rows.map(async (row) => ({
+          ...row,
+          family_abonements: await this.getAllAbonementsOfClientAndRelatives(row.client_id, filters),
+        }))
+      );
+
+      const result = familyWithAbonements;
 
       if (error) throw error;
 
@@ -74,6 +103,80 @@ class AbonementsModel {
     } catch (error) {
       console.log('mysql error', error);
 
+      throw error;
+    } finally {
+      pool.releaseConnection(poolPromise);
+    }
+  }
+
+  async getAbonementsOfClient(clientId) {
+    const sql = `
+    SELECT * FROM abonements
+    WHERE abonement_id IN (
+      SELECT abcl_abonement_id FROM abonements_clients WHERE abcl_client_id = ?
+    )`;
+
+    let poolPromise = null;
+    try {
+      poolPromise = pool.promise();
+
+      const [rows, fields, error] = await poolPromise.execute(sql, [clientId]);
+
+      const result = rows;
+      return result;
+    } catch (error) {
+      console.log('mysql error', error);
+
+      throw error;
+    } finally {
+      pool.releaseConnection(poolPromise);
+    }
+  }
+
+  /**
+   * Добавляет новые абонементы и связывает их с клиентами
+   * @param {Array<Object>} abonements - массив объектов { quantity, activation_date, duration }
+   * @param {Array<number>} clientIds - массив client_id
+   * @param {Object} user - { user_id, branch }
+   * @returns {Promise<Array<number>>} - Массив ID созданных абонементов
+   */
+  async addAbonementForClients(abonements, clientIds, user) {
+    const poolPromise = pool.promise();
+    const abonementIds = [];
+
+    try {
+      for (const abonementData of abonements) {
+        // Вставка нового абонемента
+        const [abonementResult] = await poolPromise.execute(
+          `INSERT INTO abonements (
+            visits_quantity, visits_left, date_create, date_start, date_end, user_created_id, status_id, branch_id
+            ) VALUES (?, ?, NOW(), STR_TO_DATE(?, '%Y-%m-%d'), DATE_ADD(STR_TO_DATE(?, '%Y-%m-%d'), INTERVAL ? DAY), ?, ?, ?)`,
+          [
+            abonementData.quantity || 0,
+            abonementData.quantity || 0,
+            abonementData.activation_date,
+            abonementData.activation_date,
+            abonementData.duration || 30,
+            user.user_id,
+            1,
+            user.branch,
+          ]
+        );
+        const abonementId = abonementResult.insertId;
+        abonementIds.push(abonementId);
+
+        // Связываем абонемент с клиентами
+        for (const clientId of clientIds) {
+          await poolPromise.execute(
+            `INSERT INTO abonements_clients (abcl_abonement_id, abcl_client_id) VALUES (?, ?)`,
+            [abonementId, clientId]
+          );
+        }
+      }
+
+      return abonementIds;
+    } catch (error) {
+      console.error('Ошибка при добавлении абонементов:', error);
       throw error;
     } finally {
       pool.releaseConnection(poolPromise);
@@ -92,7 +195,10 @@ class AbonementsModel {
     // Инициализируем пустые массивы, если отсутствуют
     familyData.family.clients = familyData.family.clients || [];
     familyData.family.relatives = familyData.family.relatives || [];
-    familyData.family.abonements = familyData.family.abonements || {};
+    // Теперь абонементы всегда массив
+    if (!Array.isArray(familyData.family.abonements)) {
+      familyData.family.abonements = familyData.family.abonements ? [familyData.family.abonements] : [];
+    }
 
     // Проверяем, есть ли родственники
     const hasRelatives = familyData.family.relatives && familyData.family.relatives.length > 0;
@@ -100,12 +206,12 @@ class AbonementsModel {
     // Проверяем, есть ли клиенты
     const hasClients = familyData.family.clients && familyData.family.clients.length > 0;
 
-    // Проверяем, заполнен ли объект абонемента
+    // Проверяем, есть ли хотя бы один валидный абонемент
     const hasAbonementData =
-      familyData.family.abonements &&
-      (familyData.family.abonements.quantity ||
-        familyData.family.abonements.activation_date ||
-        familyData.family.abonements.duration);
+      Array.isArray(familyData.family.abonements) &&
+      familyData.family.abonements.some(
+        (abonement) => abonement && (abonement.quantity || abonement.activation_date || abonement.duration)
+      );
 
     // Если нет родственников, но есть клиенты - ошибка
     if (!hasRelatives && hasClients) {
@@ -157,17 +263,8 @@ class AbonementsModel {
       connection = await poolPromise.getConnection();
       await connection.beginTransaction();
 
-      // Функция для безопасной обработки параметров запроса (undefined -> null)
-      const safeSqlParams = (params) => {
-        return params.map((param) => (param === undefined ? null : param));
-      };
-
-      // Обертка для execute с безопасной обработкой параметров
-      const safeExecute = async (sql, params) => {
-        return await poolPromise.execute(sql, safeSqlParams(params));
-      };
-
-      const execute = async (sql, params) => await safeExecute(sql, params);
+      // Используем приватный метод _safeExecute, передавая poolPromise для управления транзакцией
+      const execute = async (sql, params) => await this._safeExecute(sql, params, poolPromise);
       const getCurrentData = async (sql, id) => {
         const [rows] = await execute(sql, [id]);
         return rows[0];
@@ -181,7 +278,7 @@ class AbonementsModel {
       // Создаем клиентов
       const clientIds = [];
       for (const client of familyData.family.clients) {
-        const clientResult = await safeExecute(sqlClient, [
+        const clientResult = await execute(sqlClient, [
           client.surname,
           client.name,
           client.patronymic,
@@ -193,13 +290,6 @@ class AbonementsModel {
 
         const clientId = clientResult[0].insertId;
         clientIds.push(clientId);
-
-        // searchDAL.addToIndex('clients', {
-        //   client_id: clientId,
-        //   surname: client.surname,
-        //   name: client.name,
-        //   patronymic: client.patronymic,
-        // });
       }
 
       // Создаем родственников и связываем их с клиентами
@@ -209,7 +299,7 @@ class AbonementsModel {
 
       if (familyData.family.relatives && familyData.family.relatives.length > 0) {
         for (const relative of familyData.family.relatives) {
-          const relativeResult = await safeExecute(sqlRelative, [
+          const relativeResult = await execute(sqlRelative, [
             relative.surname,
             relative.name,
             relative.patronymic,
@@ -222,9 +312,9 @@ class AbonementsModel {
           relativeIds.push(relativeId);
 
           // Добавляем телефон родственника
-          await safeExecute(sqlTelephone, [relative.telephone, relativeId, user.branch]);
+          await execute(sqlTelephone, [relative.telephone, relativeId, user.branch]);
 
-          const telephoneResult = await safeExecute(
+          const telephoneResult = await execute(
             'SELECT telephone_number_id FROM telephone_numbers WHERE relative_id = ? AND telephone = ?',
             [relativeId, relative.telephone]
           );
@@ -238,7 +328,7 @@ class AbonementsModel {
 
           // Связываем родственника с каждым клиентом
           for (const clientId of clientIds) {
-            await safeExecute(sqlClientRelative, [clientId, relativeId]);
+            await execute(sqlClientRelative, [clientId, relativeId]);
           }
         }
       }
@@ -252,44 +342,43 @@ class AbonementsModel {
         return `${year}-${month}-${day}`;
       };
 
-      // Создаем абонемент только если есть данные абонемента
-      let abonementId = null;
+      // Создаем абонементы только если есть хотя бы один валидный абонемент
+      let abonementIds = [];
       if (hasAbonementData) {
-        const abonementResult = await safeExecute(sqlAbonement, [
-          familyData.family.abonements?.quantity || 0,
-          familyData.family.abonements?.quantity || 0,
-          familyData.family.abonements?.activation_date || getCurrentDate(),
-          familyData.family.abonements?.activation_date || getCurrentDate(),
-          familyData.family.abonements?.duration || 30,
-          user.user_id,
-          1,
-          user.branch,
-        ]);
-
-        abonementId = abonementResult[0].insertId;
-
-        // Связываем клиентов с абонементом только если абонемент был создан
-        for (const clientId of clientIds) {
-          await safeExecute(sqlAbonementsClients, [abonementId, clientId]);
-        }
+        abonementIds = await this.addAbonementForClients(familyData.family.abonements, clientIds, user);
       }
 
-      const clearClient = familyData.family.clients;
-      const clearRelative = familyData.family.relatives;
+      let clearClient = familyData.family.clients;
+      clearClient = clearClient.map((client, index) => {
+        return {
+          ...client,
+          client_id: clientIds[index],
+        };
+      });
+
+      let clearRelative = familyData.family.relatives;
+      clearRelative = clearRelative.map((relative, index) => {
+        return {
+          ...relative,
+          relative_id: relativeIds[index],
+        };
+      });
+
+      let abonements = await this.getAbonementsOfClient(clientIds[0]);
 
       searchDAL.addToIndex('families', {
         clients: clearClient,
         relatives: clearRelative,
+        abonements: abonements,
       });
 
       await connection.commit();
     } catch (error) {
       await connection.rollback();
-      console.log('mysql error', error);
-
+      console.log('mysql error in addFamily:', error);
       throw error;
     } finally {
-      pool.releaseConnection(poolPromise);
+      if (connection) pool.releaseConnection(connection); // Используем connection для release
     }
   }
 
@@ -385,21 +474,17 @@ class AbonementsModel {
       connection = await poolPromise.getConnection();
       await connection.beginTransaction();
 
-      // Функция для безопасной обработки параметров запроса (undefined -> null)
-      const safeSqlParams = (params) => {
-        return params.map((param) => (param === undefined ? null : param));
-      };
-
-      // Обертка для execute с безопасной обработкой параметров
-      const safeExecute = async (sql, params) => {
-        return await poolPromise.execute(sql, safeSqlParams(params));
-      };
-
-      const execute = async (sql, params) => await safeExecute(sql, params);
+      // Используем приватный метод _safeExecute, передавая poolPromise для управления транзакцией
+      const execute = async (sql, params) => await this._safeExecute(sql, params, poolPromise);
       const getCurrentData = async (sql, id) => {
         const [rows] = await execute(sql, [id]);
         return rows[0];
       };
+
+      // Гарантируем, что familyData.family.abonements — всегда массив
+      if (!Array.isArray(familyData.family.abonements)) {
+        familyData.family.abonements = familyData.family.abonements ? [familyData.family.abonements] : [];
+      }
 
       // Проверяем, есть ли родственники
       const hasRelatives = familyData.family.relatives && familyData.family.relatives.length > 0;
@@ -429,17 +514,41 @@ class AbonementsModel {
       // Добавляем новых родственников
       createdRelativeIds = await this._addNewRelatives(familyData, user, execute, sqlQueries, createdClientIds);
 
+      // Добавление новых абонементов для всех клиентов семьи (и новых, и существующих)
+      const hasAbonementData =
+        Array.isArray(familyData.family.abonements) &&
+        familyData.family.abonements.some(
+          (abonement) => abonement && (abonement.quantity || abonement.activation_date || abonement.duration)
+        );
+
+      // Собираем id всех клиентов семьи (и новых, и существующих)
+      const allClientIds = [
+        ...familyData.family.clients.filter((client) => client.id).map((client) => client.id),
+        ...createdClientIds,
+      ];
+      // Удаляем дубликаты
+      const uniqueClientIds = [...new Set(allClientIds.map(Number))];
+
+      if (hasAbonementData && uniqueClientIds.length) {
+        await this.addAbonementForClients(familyData.family.abonements, uniqueClientIds, user);
+      }
+
       await connection.commit();
+
+      // Получаем абонементы для возврата, если есть клиенты
+      const abonements = uniqueClientIds.length ? await this.getAbonementsOfClient(uniqueClientIds[0]) : [];
 
       return {
         createdClientIds,
         createdRelativeIds,
+        abonements,
       };
     } catch (error) {
       await connection.rollback();
+      console.log('mysql error in updateFamily:', error);
       throw error;
     } finally {
-      pool.releaseConnection(poolPromise);
+      if (connection) pool.releaseConnection(connection); // Используем connection для release
     }
   }
 
@@ -525,7 +634,6 @@ class AbonementsModel {
 
   _checkClientChanges(current, client) {
     return ['surname', 'name', 'patronymic', 'gender', 'birthday'].some((field) => {
-      console.log('field', field);
       const currentValue = current[field];
       const newValue = client[field];
 
@@ -536,8 +644,6 @@ class AbonementsModel {
       if (field === 'gender') {
         const currentGender = currentValue;
         const newGender = newValue;
-
-        console.log('currentGender', currentGender, 'newGender', newGender);
 
         return currentGender !== newGender;
       }
@@ -588,7 +694,6 @@ class AbonementsModel {
   }
 
   async _addNewClients(familyData, user, execute, sqlQueries) {
-    console.log('ADD INDEX BEFORE! ! ! !  !! ! ! ');
     if (!familyData?.family?.clients?.length) {
       return [];
     }
@@ -843,6 +948,152 @@ class AbonementsModel {
 
     console.log('Завершено добавление новых родственников. Создано:', createdRelativeIds.length);
     return createdRelativeIds;
+  }
+
+  // Вспомогательный метод для построения динамических SQL фильтров
+  _buildDynamicFilters(filters, aliasConfig) {
+    const sqlClauses = [];
+    const queryParams = [];
+    const { abonementTable, clientTable } = aliasConfig;
+
+    const filterConfig = [
+      // Фильтры для таблицы абонементов (используют abonementTable)
+      { filterKey: 'statusId', dbColumn: 'status_id', tableAliasKey: 'abonementTable' },
+      { filterKey: 'abonementId', dbColumn: 'abonement_id', tableAliasKey: 'abonementTable' },
+      { filterKey: 'dateStart', dbColumn: 'date_start', tableAliasKey: 'abonementTable' },
+      { filterKey: 'dateEnd', dbColumn: 'date_end', tableAliasKey: 'abonementTable' },
+      { filterKey: 'visitsQuantity', dbColumn: 'visits_quantity', tableAliasKey: 'abonementTable' },
+      { filterKey: 'visitsLeft', dbColumn: 'visits_left', tableAliasKey: 'abonementTable' },
+      {
+        filterKey: 'year',
+        dbColumn: `YEAR(${abonementTable}.date_create)`,
+        tableAliasKey: 'abonementTable',
+        isFunctionCall: true,
+      },
+      {
+        filterKey: 'month',
+        dbColumn: `MONTH(${abonementTable}.date_create)`,
+        tableAliasKey: 'abonementTable',
+        isFunctionCall: true,
+      },
+      // Фильтры для таблицы клиентов (используют clientTable)
+      {
+        filterKey: 'surname',
+        dbColumn: 'surname',
+        tableAliasKey: 'clientTable',
+        operator: 'LIKE',
+        valueTransformer: (val) => `%${val}%`,
+      },
+      {
+        filterKey: 'name',
+        dbColumn: 'name',
+        tableAliasKey: 'clientTable',
+        operator: 'LIKE',
+        valueTransformer: (val) => `%${val}%`,
+      },
+      {
+        filterKey: 'patronymic',
+        dbColumn: 'patronymic',
+        tableAliasKey: 'clientTable',
+        operator: 'LIKE',
+        valueTransformer: (val) => `%${val}%`,
+      },
+    ];
+
+    filterConfig.forEach((config) => {
+      const filterValue = filters[config.filterKey];
+      if (filterValue != null && filterValue !== '') {
+        const tableAlias = aliasConfig[config.tableAliasKey];
+        // Пропускаем фильтры по клиентам, если clientTable не предоставлен в aliasConfig
+        if (config.tableAliasKey === 'clientTable' && !clientTable) {
+          return;
+        }
+
+        let columnExpression = config.isFunctionCall ? config.dbColumn : `${tableAlias}.${config.dbColumn}`;
+        const operator = config.operator || '=';
+
+        sqlClauses.push(`${columnExpression} ${operator} ?`);
+        queryParams.push(config.valueTransformer ? config.valueTransformer(filterValue) : filterValue);
+      }
+    });
+
+    const finalSql = sqlClauses.length > 0 ? `AND ${sqlClauses.join(' AND ')}` : '';
+
+    return {
+      sql: finalSql,
+      params: queryParams,
+    };
+  }
+
+  /**
+   * Возвращает все абонементы, принадлежащие клиенту или его родственникам
+   * @param {number} clientId - ID клиента
+   * @param {object} filters - Объект с фильтрами
+   * @returns {Promise<Array<Object>>} - Массив абонементов
+   */
+  async getAllAbonementsOfClientAndRelatives(clientId, filters = {}) {
+    let poolPromise = null;
+    try {
+      poolPromise = pool.promise();
+
+      // Генерируем SQL и параметры для первой части UNION
+      const filterConditionsPart1 = this._buildDynamicFilters(filters, {
+        abonementTable: 'a',
+        clientTable: 'cl',
+      });
+
+      // Генерируем SQL и параметры для второй части UNION
+      const filterConditionsPart2 = this._buildDynamicFilters(filters, {
+        abonementTable: 'a',
+        clientTable: 'cl_rel',
+      });
+
+      const finalQueryParams = [
+        clientId, // Для WHERE ac.abcl_client_id = ?
+        ...filterConditionsPart1.params,
+        clientId, // Для подзапроса WHERE cr2.clrl_client_id = ?
+        ...filterConditionsPart2.params,
+      ];
+
+      const sql = `
+      SELECT DISTINCT a.*, s.name as status_name,
+      GROUP_CONCAT(DISTINCT cl.name SEPARATOR ', ') as client_names,
+      GROUP_CONCAT(DISTINCT cl.surname SEPARATOR ', ') as client_surnames
+      FROM abonements a
+      LEFT JOIN abonement_statuses s ON a.status_id = s.abonement_status_id
+      JOIN abonements_clients ac ON ac.abcl_abonement_id = a.abonement_id
+      LEFT JOIN clients cl ON ac.abcl_client_id = cl.client_id
+      WHERE ac.abcl_client_id = ? ${filterConditionsPart1.sql}
+      GROUP BY a.abonement_id, s.name
+
+      UNION
+
+      SELECT DISTINCT a.*, s.name as status_name,
+      GROUP_CONCAT(DISTINCT cl_rel.name SEPARATOR ', ') as client_names,
+      GROUP_CONCAT(DISTINCT cl_rel.surname SEPARATOR ', ') as client_surnames
+      FROM abonements a
+      LEFT JOIN abonement_statuses s ON a.status_id = s.abonement_status_id
+      JOIN abonements_clients ac_rel ON ac_rel.abcl_abonement_id = a.abonement_id
+      JOIN clients cl_rel ON ac_rel.abcl_client_id = cl_rel.client_id
+      JOIN clients_relatives cr_rel ON cr_rel.clrl_client_id = cl_rel.client_id
+      WHERE cr_rel.clrl_relative_id IN (
+          SELECT cr2.clrl_relative_id
+          FROM clients_relatives cr2
+          WHERE cr2.clrl_client_id = ? 
+      ) ${filterConditionsPart2.sql}
+      GROUP BY a.abonement_id, s.name;
+      `;
+
+      const [rows] = await poolPromise.execute(sql, finalQueryParams);
+      return rows;
+    } catch (error) {
+      console.error('Error in getAllAbonementsOfClientAndRelatives:', error);
+      throw error;
+    } finally {
+      if (poolPromise) {
+        pool.releaseConnection(poolPromise);
+      }
+    }
   }
 }
 
