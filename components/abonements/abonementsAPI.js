@@ -29,4 +29,12 @@ router.put(
   controller.updateFamily
 );
 
+router.post(
+  '/addAbonement',
+  encoder.none(),
+  commonController.checkAccess(['employee', 'admin']),
+  validation.abonementMiddleware(validation.addAbonementSchema()),
+  controller.addAbonement
+);
+
 module.exports = router;
