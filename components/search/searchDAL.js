@@ -6,7 +6,7 @@ class SearchModel {
     try {
       const response = await esClient.search({
         index: 'families',
-        size: 5,
+        size: 3,
         query: {
           bool: {
             should: [

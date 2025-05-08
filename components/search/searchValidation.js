@@ -8,10 +8,7 @@ class searchValidation {
       try {
         const searchData = new Search(req.body);
 
-        console.log('searchData', searchData);
-
         for (let param in searchData) {
-          console.log('param', param, searchData[param]);
           await schema.validateAsync(searchData[param]);
         }
 

@@ -104,6 +104,7 @@ async function createIndexIfNotExists(indexName, settings, mappings) {
               },
             },
             releative_type_id: { type: 'integer' },
+            relative_id: { type: 'integer' },
           },
         },
         clients: {
@@ -136,6 +137,7 @@ async function createIndexIfNotExists(indexName, settings, mappings) {
             },
             gender: { type: 'integer' },
             birthday: { type: 'date', format: 'dd.MM.yyyy || strict_date_optional_time || epoch_millis' },
+            client_id: { type: 'integer' },
           },
         },
       },
