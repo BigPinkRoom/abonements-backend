@@ -53,6 +53,8 @@ class SearchModel {
       }
       const searchResponse = await searchResponseModel(response.hits.hits);
 
+      console.log('searchResponse', searchResponse[0].clients);
+
       return searchResponse || [];
     } catch (error) {
       console.error('Search error:', error.message);
@@ -60,10 +62,12 @@ class SearchModel {
     }
   }
 
-  async addToIndex(indexName, documentData) {
+  async addToIndex(indexName, firstClientId, documentData) {
+    console.log('documentData', documentData);
     try {
       const response = await esClient.index({
         index: indexName,
+        id: firstClientId,
         document: documentData,
       });
 
@@ -71,6 +75,35 @@ class SearchModel {
       return true;
     } catch (error) {
       console.error(`❌ Ошибка добавления в "${indexName}":`, error.message);
+      return false;
+    }
+  }
+
+  async updateInIndex(indexName, documentId, updateData) {
+    try {
+      const response = await esClient.update({
+        index: indexName,
+        id: documentId,
+        doc: updateData,
+      });
+      console.log(`✅ Данные обновлены в "${indexName}". ID: ${documentId}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Ошибка обновления в "${indexName}":`, error.message);
+      return false;
+    }
+  }
+
+  async deleteFromIndex(indexName, documentId) {
+    try {
+      const response = await esClient.delete({
+        index: indexName,
+        id: documentId,
+      });
+      console.log(`✅ Данные удалены из "${indexName}". ID: ${documentId}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Ошибка удаления из "${indexName}":`, error.message);
       return false;
     }
   }
