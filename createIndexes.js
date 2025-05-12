@@ -70,7 +70,6 @@ async function createIndexIfNotExists(indexName, settings, mappings) {
         relatives: {
           type: 'nested', // Массив родителей
           properties: {
-            parent_id: { type: 'integer' }, // Уникальный ID родителя
             surname: {
               type: 'text',
               analyzer: 'my_edge_ngram_analyzer',
@@ -110,7 +109,6 @@ async function createIndexIfNotExists(indexName, settings, mappings) {
         clients: {
           type: 'nested', // Массив детей
           properties: {
-            child_id: { type: 'integer' }, // Уникальный ID ребенка
             surname: {
               type: 'text',
               analyzer: 'my_edge_ngram_analyzer',
@@ -138,6 +136,12 @@ async function createIndexIfNotExists(indexName, settings, mappings) {
             gender: { type: 'integer' },
             birthday: { type: 'date', format: 'dd.MM.yyyy || strict_date_optional_time || epoch_millis' },
             client_id: { type: 'integer' },
+          },
+        },
+        abonements: {
+          type: 'nested', // Массив абонементов
+          properties: {
+            abonement_id: { type: 'integer' }, // Уникальный ID абонемента
           },
         },
       },
