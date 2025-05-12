@@ -346,6 +346,11 @@ class AbonementsModel {
       let abonementIds = [];
       if (hasAbonementData) {
         abonementIds = await this.addAbonementForClients(familyData.family.abonements, clientIds, user);
+        // ПАТЧ: присваиваем abonement_id новым абонементам
+        familyData.family.abonements = familyData.family.abonements.map((abonement, idx) => ({
+          ...abonement,
+          abonement_id: abonementIds[idx],
+        }));
       }
 
       let clearClient = familyData.family.clients;
@@ -366,10 +371,10 @@ class AbonementsModel {
 
       let abonements = await this.getAbonementsOfClient(clientIds[0]);
 
-      searchDAL.addToIndex('families', {
+      searchDAL.addToIndex('families', clientIds[0], {
         clients: clearClient,
         relatives: clearRelative,
-        abonements: abonements,
+        abonements: familyData.family.abonements, // ПАТЧ: теперь с ID
       });
 
       await connection.commit();
@@ -474,81 +479,137 @@ class AbonementsModel {
       connection = await poolPromise.getConnection();
       await connection.beginTransaction();
 
-      // Используем приватный метод _safeExecute, передавая poolPromise для управления транзакцией
       const execute = async (sql, params) => await this._safeExecute(sql, params, poolPromise);
       const getCurrentData = async (sql, id) => {
         const [rows] = await execute(sql, [id]);
         return rows[0];
       };
 
-      // Гарантируем, что familyData.family.abonements — всегда массив
+      // Гарантируем массив абонементов
       if (!Array.isArray(familyData.family.abonements)) {
         familyData.family.abonements = familyData.family.abonements ? [familyData.family.abonements] : [];
       }
 
-      // Проверяем, есть ли родственники
+      // Проверяем наличие клиентов и родственников
       const hasRelatives = familyData.family.relatives && familyData.family.relatives.length > 0;
-
-      // Проверяем, есть ли клиенты
       const hasClients = familyData.family.clients && familyData.family.clients.length > 0;
 
-      // Если после обновления не останется родственников, но останутся клиенты - ошибка
       if (!hasRelatives && hasClients) {
         throw new Error('Невозможно оставить клиента без родственника');
       }
 
-      // Сначала обновляем существующих клиентов
+      // --- Шаг 1: Обновляем существующих клиентов ---
       await this._updateExistingClients(familyData, execute, getCurrentData, sqlQueries);
 
-      // Затем обновляем существующих родственников
+      // --- Шаг 2: Обновляем существующих родственников ---
       await this._updateExistingRelatives(familyData, execute, getCurrentData, sqlQueries);
 
-      // Удаляем клиентов, которых больше нет в семье
+      // --- Шаг 3: Удаляем клиентов, которых больше нет в семье ---
       await this._handleClientDeletions(familyData, execute, sqlQueries);
 
-      // Удаляем родственников, которых больше нет в семье
+      // --- Шаг 4: Удаляем родственников, которых больше нет в семье ---
       await this._handleRelativeDeletions(familyData, execute, sqlQueries);
 
-      // В конце добавляем новых клиентов
+      // --- Шаг 5: Добавляем новых клиентов ---
       createdClientIds = await this._addNewClients(familyData, user, execute, sqlQueries);
-      // Добавляем новых родственников
+
+      // --- Шаг 6: Добавляем новых родственников ---
       createdRelativeIds = await this._addNewRelatives(familyData, user, execute, sqlQueries, createdClientIds);
 
-      // Добавление новых абонементов для всех клиентов семьи (и новых, и существующих)
-      const hasAbonementData =
-        Array.isArray(familyData.family.abonements) &&
-        familyData.family.abonements.some(
-          (abonement) => abonement && (abonement.quantity || abonement.activation_date || abonement.duration)
-        );
+      // --- Шаг 7: Добавляем новые абонементы ---
+      // Фильтруем только НОВЫЕ абонементы из данных фронтенда
+      const newAbonementsFromFrontend = familyData.family.abonements.filter((ab) => !ab.abonement_id && ab.quantity);
 
-      // Собираем id всех клиентов семьи (и новых, и существующих)
       const allClientIds = [
-        ...familyData.family.clients.filter((client) => client.id).map((client) => client.id),
+        ...familyData.family.clients.filter((client) => client.id).map((client) => Number(client.id)),
         ...createdClientIds,
       ];
-      // Удаляем дубликаты
       const uniqueClientIds = [...new Set(allClientIds.map(Number))];
 
-      if (hasAbonementData && uniqueClientIds.length) {
-        await this.addAbonementForClients(familyData.family.abonements, uniqueClientIds, user);
+      let newAbonementIds = []; // Будем хранить ID только НОВЫХ созданных абонементов
+      // Добавляем только если есть новые абонементы и клиенты для привязки
+      if (newAbonementsFromFrontend.length > 0 && uniqueClientIds.length) {
+        console.log('Adding new abonements:', newAbonementsFromFrontend); // Логируем, что именно добавляем
+        // Передаем ТОЛЬКО новые абонементы
+        newAbonementIds = await this.addAbonementForClients(newAbonementsFromFrontend, uniqueClientIds, user);
+        console.log('New abonement IDs created:', newAbonementIds);
+        // Не нужно изменять familyData.family.abonements здесь, так как
+        // данные для индексации все равно будут получены заново из БД чуть ниже.
       }
 
-      await connection.commit();
+      await connection.commit(); // Коммит транзакции
 
-      // Получаем абонементы для возврата, если есть клиенты
-      const abonements = uniqueClientIds.length ? await this.getAbonementsOfClient(uniqueClientIds[0]) : [];
+      // --- ФИКС: Присваиваем client_id и relative_id новым элементам ---
+      let newClientIdx = 0; // Счетчик для ID новых клиентов
+      const clearClients = familyData.family.clients.map((client) => {
+        if (client.id) {
+          // Если это существующий клиент (имеет ID из входящих данных)
+          return {
+            ...client,
+            // Убедимся, что client_id также установлен, предпочтительно из client.client_id или из client.id
+            client_id: client.client_id || client.id,
+            id: client.id, // id из входящих данных является основным для существующих
+          };
+        } else {
+          // Это новый клиент, которому нужен ID из createdClientIds
+          const newDbId = createdClientIds[newClientIdx++];
+          return {
+            ...client,
+            client_id: newDbId,
+            id: newDbId,
+          };
+        }
+      });
+
+      let newRelativeIdx = 0; // Счетчик для ID новых родственников
+      const clearRelatives = familyData.family.relatives.map((relative) => {
+        if (relative.id) {
+          // Если это существующий родственник (имеет ID из входящих данных)
+          return {
+            ...relative,
+            // Убедимся, что relative_id также установлен
+            relative_id: relative.relative_id || relative.id,
+            id: relative.id, // id из входящих данных является основным для существующих
+          };
+        } else {
+          // Это новый родственник, которому нужен ID из createdRelativeIds
+          const newDbId = createdRelativeIds[newRelativeIdx++];
+          return {
+            ...relative,
+            relative_id: newDbId,
+            id: newDbId,
+          };
+        }
+      });
+      // --- КОНЕЦ ФИКСА ---
+
+      // Получаем ВСЕ абонементы семьи для индексации и возврата (включая только что добавленные)
+      const allFamilyAbonementsRaw = uniqueClientIds.length ? await this.getAbonementsOfClient(uniqueClientIds[0]) : [];
+
+      // Удаляем поле 'visits_quantity' перед индексацией, т.к. оно не ожидается схемой индекса families
+      const allFamilyAbonementsForIndex = allFamilyAbonementsRaw.map(({ visits_quantity, ...rest }) => rest);
+
+      // --- Индексируем семью ---
+      if (uniqueClientIds.length > 0) {
+        // Только если есть клиенты / ID для индексации
+        await searchDAL.addToIndex('families', uniqueClientIds[0], {
+          clients: clearClients,
+          relatives: clearRelatives,
+          abonements: allFamilyAbonementsForIndex, // Используем абонементы без visits_quantity
+        });
+      }
 
       return {
         createdClientIds,
         createdRelativeIds,
-        abonements,
+        abonements: allFamilyAbonementsRaw, // Возвращаем также все абонементы семьи (с visits_quantity)
       };
     } catch (error) {
       await connection.rollback();
-      console.log('mysql error in updateFamily:', error);
+      console.error('Ошибка в updateFamily:', error);
       throw error;
     } finally {
-      if (connection) pool.releaseConnection(connection); // Используем connection для release
+      if (connection) pool.releaseConnection(connection);
     }
   }
 
