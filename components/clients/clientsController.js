@@ -1,42 +1,13 @@
 const clientsDal = require('./clientsDAL');
 
 class ClientsController {
-  async get(req, res, next) {
+  async getClientById(req, res, next) {
     try {
-      const result = await clientsDal.get(res.locals.clientData.params);
+      const result = await clientsDal.getClientById(res.locals.clientData);
 
       res.status(200).json(result);
     } catch (error) {
       console.log('controller client get error', error);
-
-      res.status(500).json({ error: { message: error } });
-      next(error);
-    }
-  }
-
-  async add(req, res, next) {
-    try {
-      const result = clientsDal.addClients(res.locals.clientsData);
-
-      res.status(200).json(result);
-    } catch (error) {
-      console.log('controller client add error', error);
-
-      res.status(500).json({ error: { message: error } });
-      next(error);
-    }
-  }
-
-  async searchFamily(req, res, next) {
-    try {
-      const result = clientsDal.searchFamily(res.locals.searchData);
-
-      res.status(200).json(result);
-    } catch (error) {
-      console.log('controller client search error', error);
-
-      res.status(500).json({ error: { message: error } });
-      next(error);
     }
   }
 }

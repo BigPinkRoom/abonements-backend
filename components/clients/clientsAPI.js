@@ -5,16 +5,10 @@ const commonController = require('../common/commonController');
 const validation = require('./clientsValidation');
 
 router.post(
-  '/list',
+  '/get-client-by-id',
   commonController.checkAccess(['employee', 'admin']),
-  validation.clientMiddleware(validation.getClientsSchema()),
-  controller.get
+  validation.clientMiddleware(validation.getClientByIdSchema()),
+  controller.getClientById
 );
 
-router.post(
-  '/add',
-  commonController.checkAccess(['employee', 'admin']),
-  validation.clientMiddleware(validation.addClientsSchema()),
-  controller.get
-);
 module.exports = router;

@@ -5,14 +5,16 @@ const Client = require('./client');
 class ClientValidation {
   clientMiddleware(schema) {
     return async (req, res, next) => {
+      console.log('req.body', req.body);
       try {
         const clientData = new Client(req.body);
+        let result = null;
 
-        for (let param in clientData) {
-          await schema.validateAsync(clientData[param]);
+        if (clientData) {
+          result = await schema.validateAsync({ id: clientData.id });
         }
 
-        res.locals.clientData = clientData;
+        res.locals.clientData = result.id;
 
         next();
       } catch (error) {
@@ -28,45 +30,9 @@ class ClientValidation {
     };
   }
 
-  getClientsSchema() {
+  getClientByIdSchema() {
     const schema = Joi.object({
-      filters: Joi.object({
-        month: Joi.number().integer().min(1).max(12),
-        year: Joi.number().integer().min(2021).max(2050),
-      }),
-      sortings: Joi.array().items(
-        Joi.object({
-          name: Joi.string().valid(...clientsConstants.CLIENTS_SORT_NAMES),
-          type: Joi.string().valid(...clientsConstants.CLIENTS_SORT_TYPES),
-        })
-      ),
-      id: Joi.string().min(1).max(6).regex(/^\d+$/),
-    });
-
-    return schema;
-  }
-
-  addClientsSchema() {
-    const schema = Joi.object({
-      clients: Joi.array().items(
-        Joi.object({
-          surname: Joi.string().min(2).max(100),
-          name: Joi.string().min(2).max(100),
-          patronymic: Joi.string().min(2).max(100),
-          birthday: Joi.date().less('1-1-2000').greater('now').iso(),
-        })
-      ),
-      relatives: Joi.array().items(
-        Joi.object({
-          name: Joi.string().min(2).max(100),
-          telephone: Joi.string().min(4).max(100),
-        })
-      ),
-      telephones: Joi.array().items(
-        Joi.object({
-          telephone: Joi.string().min(4).max(100),
-        })
-      ),
+      id: Joi.number().min(1).max(9999999).required(),
     });
 
     return schema;
