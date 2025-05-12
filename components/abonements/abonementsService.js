@@ -5,35 +5,73 @@ const helpersDate = require('../../helpers/helpersDate');
 class AbonementsService {
   createAbonementsFull({ abonementsWithClients, abonementsEvents }) {
     const groupedAbonements = {};
+    const orderedFamilyKeys = []; // Для сохранения порядка ключей
 
     abonementsWithClients.forEach((row) => {
-      const abonementId = row.abonement_id;
+      if (!Array.isArray(row.family_abonements) || row.family_abonements.length === 0) {
+        return; // Пропускаем строки без family_abonements
+      }
 
-      if (!groupedAbonements[abonementId]) {
-        groupedAbonements[abonementId] = {
-          abonement: {},
+      const abonementIdFamily = row.family_abonements[0].abonement_id;
+
+      // Если ключ встречается впервые, добавляем его в orderedFamilyKeys
+      // и инициализируем группу
+      if (!groupedAbonements[abonementIdFamily]) {
+        orderedFamilyKeys.push(abonementIdFamily);
+        groupedAbonements[abonementIdFamily] = {
+          abonements: [],
           clients: [],
           relatives: [],
-          events: [],
+          events: [], // Инициализируем пустым, события добавятся позже
         };
       }
 
+      const currentGroup = groupedAbonements[abonementIdFamily];
       const { client, relative, abonement } = this._extractEntities(row);
 
-      if (client && !groupedAbonements[abonementId].clients.some((c) => c.client_id === client.client_id)) {
-        groupedAbonements[abonementId].clients.push(client);
+      // Добавляем уникальных клиентов
+      if (client && client.client_id && !currentGroup.clients.some((c) => c.client_id === client.client_id)) {
+        currentGroup.clients.push(client);
       }
 
-      if (relative && !groupedAbonements[abonementId].relatives.some((r) => r.relative_id === relative.relative_id)) {
-        groupedAbonements[abonementId].relatives.push(relative);
+      // Добавляем уникальных родственников
+      if (
+        relative &&
+        relative.relative_id &&
+        !currentGroup.relatives.some((r) => r.relative_id === relative.relative_id)
+      ) {
+        currentGroup.relatives.push(relative);
       }
 
-      groupedAbonements[abonementId].abonement = abonement;
+      // Добавляем все семейные абонементы из текущей строки, если они еще не были добавлены
+      // целиком как группа. Эта логика направлена на то, чтобы family_abonements из одной row
+      // не дублировались, если несколько row ссылаются на один и тот же набор family_abonements.
+      // Мы будем просто добавлять все family_abonements из КАЖДОЙ row, которая относится к этому ключу.
+      // Повторное добавление одинаковых объектов абонементов не должно быть проблемой, если они идентичны.
+      // Однако, для чистоты, можно проверять уникальность добавляемых абонементов внутри группы.
+      if (Array.isArray(row.family_abonements)) {
+        row.family_abonements.forEach((famAbonement) => {
+          if (!currentGroup.abonements.some((a) => a.abonement_id === famAbonement.abonement_id)) {
+            currentGroup.abonements.push(famAbonement);
+          }
+        });
+      }
     });
 
+    // Добавляем события к собранным группам
     this._addEventsToAbonements(groupedAbonements, abonementsEvents);
 
-    return Object.values(groupedAbonements);
+    // Формируем итоговый массив в порядке orderedFamilyKeys
+    const result = orderedFamilyKeys.map((key) => {
+      const group = groupedAbonements[key];
+      return {
+        ...group,
+        clients: addIsFirstClientFlag(group.clients),
+        relatives: addIsFirstRelativeFlag(group.relatives),
+      };
+    });
+
+    return result;
   }
 
   _extractEntities(row) {
@@ -82,3 +120,23 @@ class AbonementsService {
 }
 
 module.exports = new AbonementsService();
+
+// Вспомогательная функция для добавления is_first_client
+function addIsFirstClientFlag(clients) {
+  const ids = clients.map((c) => Number(c.client_id)).filter((id) => !isNaN(id));
+  const firstId = ids.length ? Math.min(...ids) : null;
+  return clients.map((c) => ({
+    ...c,
+    is_first_client: clients.length === 1 ? true : Number(c.client_id) === firstId,
+  }));
+}
+
+// Вспомогательная функция для добавления is_first_relative
+function addIsFirstRelativeFlag(relatives) {
+  const ids = relatives.map((r) => Number(r.relative_id)).filter((id) => !isNaN(id));
+  const firstId = ids.length ? Math.min(...ids) : null;
+  return relatives.map((r) => ({
+    ...r,
+    is_first_relative: relatives.length === 1 ? true : Number(r.relative_id) === firstId,
+  }));
+}

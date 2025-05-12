@@ -197,6 +197,7 @@ class AbonementValidation {
         clients: Joi.array().items(
           Joi.object({
             id: Joi.number().min(1).max(999999),
+            is_first_client: Joi.boolean(),
             name: Joi.string().min(1).max(150),
             surname: Joi.string().min(1).max(150),
             patronymic: Joi.string().min(1).max(150),
@@ -232,6 +233,7 @@ class AbonementValidation {
         relatives: Joi.array().items(
           Joi.object({
             id: Joi.number().min(1).max(999999),
+            // is_first_relative: Joi.boolean(),
             name: Joi.string().min(1).max(150),
             surname: Joi.string().min(1).max(150),
             patronymic: Joi.string().min(1).max(150),
@@ -241,10 +243,18 @@ class AbonementValidation {
         ),
         abonements: Joi.array().items(
           Joi.object({
-            id: Joi.number().min(1).max(999999),
-            duration: Joi.string(),
-            quantity: Joi.string(),
-            activation_date: Joi.date().min(today),
+            abonement_id: Joi.number().min(1).max(999999).optional(),
+            visits_quantity: Joi.string().optional(),
+            visits_left: Joi.string().optional(),
+            date_create: Joi.date().optional(),
+            date_start: Joi.date().optional(),
+            date_end: Joi.date().optional(),
+            user_created_id: Joi.number().optional(),
+            status_id: Joi.number().optional(),
+            branch_id: Joi.number().optional(),
+            quantity: Joi.string().optional(),
+            duration: Joi.string().optional(),
+            activation_date: Joi.date().min(today).optional(),
           })
         ),
       }),

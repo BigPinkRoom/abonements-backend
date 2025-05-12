@@ -34,6 +34,7 @@ module.exports.abonementsConstants = {
     'client_patronymic',
     'client_surname',
     'client_gender',
+    'is_first_client',
   ],
   ABONEMENTS_FULL_RELATIVE_COLUMNS: [
     'relative_id',
@@ -42,6 +43,7 @@ module.exports.abonementsConstants = {
     'relative_surname',
     'relative_type_id',
     'relative_telephone',
+    'is_first_relative',
   ],
   ABONEMENTS_FULL_ABONEMENT_COLUMNS: [
     'abonement_id',
