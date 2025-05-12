@@ -5,8 +5,6 @@ class SearchController {
     try {
       const result = await searchDAL.searchClients(res.locals.searchData);
 
-      console.log('result search dal', result);
-
       res.status(200).json(result);
     } catch (error) {
       console.log('controller searches get error', error);
