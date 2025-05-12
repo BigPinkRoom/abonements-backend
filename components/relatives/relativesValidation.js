@@ -8,8 +8,16 @@ class menuValidation {
       try {
         const relativeData = new Relative(req.body);
 
-        for (let param in relativeData) {
-          await schema.validateAsync(relativeData[param]);
+        if (relativeData.id) {
+          await schema.validateAsync({ id: relativeData.id });
+
+          res.locals.relativeData = relativeData;
+        }
+
+        if (!relativeData.id) {
+          for (let param in relativeData) {
+            await schema.validateAsync(relativeData[param]);
+          }
         }
 
         res.locals.relativeData = relativeData;
@@ -38,6 +46,13 @@ class menuValidation {
       ),
     });
 
+    return schema;
+  }
+
+  getRelativeByIdSchema() {
+    const schema = Joi.object({
+      id: Joi.number().min(1).max(9999999).required(),
+    });
     return schema;
   }
 }

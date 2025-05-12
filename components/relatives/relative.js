@@ -1,10 +1,13 @@
 const escapeHtml = require('escape-html');
 
 class Relative {
-  constructor(params = []) {
+  constructor(params = {}) {
     if (params) {
       this.params = {};
 
+      if (params.id) {
+        this.id = escapeHtml(params.id);
+      }
       if (params.sortings && Array.isArray(params.sortings)) {
         this.params.sortings = params.sortings.map((param) => {
           return {
@@ -13,10 +16,8 @@ class Relative {
           };
         });
       }
-
       if (params.filters) {
         this.params.filters = {};
-
         const filterNames = Object.keys(params.filters);
 
         filterNames.forEach((filterName) => {

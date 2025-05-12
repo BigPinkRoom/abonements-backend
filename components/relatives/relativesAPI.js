@@ -13,4 +13,11 @@ router.post(
   controller.getTypes
 );
 
+router.post(
+  '/get-relative-by-id',
+  commonController.checkAccess(['employee', 'admin']),
+  validation.relativeMiddleware(validation.getRelativeByIdSchema()),
+  controller.getRelativeById
+);
+
 module.exports = router;
