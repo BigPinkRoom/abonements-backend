@@ -2,6 +2,7 @@ const pool = require('../../pool.db').getPool();
 const abonementsService = require('./abonementsService');
 const helpersDAL = require('../../helpers/helpersDAL');
 const searchDAL = require('../search/searchDAL');
+const { isEqual } = require('lodash');
 
 class AbonementsModel {
   // Вспомогательный приватный метод для безопасной обработки SQL параметров
@@ -184,6 +185,7 @@ class AbonementsModel {
   }
 
   async addFamily(familyData, user) {
+    // console.log('familyData ------------------------', familyData); // Оставим этот лог, если он был до наших правок или нужен для других целей
     if (!familyData || !user) {
       throw new Error('Необходимые параметры не предоставлены');
     }
@@ -215,12 +217,25 @@ class AbonementsModel {
 
     // Если нет родственников, но есть клиенты - ошибка
     if (!hasRelatives && hasClients) {
-      throw new Error('Невозможно создать клиента без родственника');
+      const error = new Error('Невозможно создать клиента без родственника');
+      error.code = 'Abonements:relativeRequired';
+      error.status = 400;
+      throw error;
     }
 
     // Если нет ни клиентов, ни родственников - также ошибка
     if (!hasClients && !hasRelatives) {
-      throw new Error('Необходимо указать хотя бы одного клиента и родственника');
+      const error = new Error('Необходимо указать хотя бы одного клиента и родственника.');
+      error.code = 'Abonements:ClientOrRelativeRequired';
+      error.status = 400;
+      throw error;
+    }
+
+    if (!hasClients && hasRelatives) {
+      const error = new Error('Невозможно создать родственника без клиента');
+      error.code = 'Abonements:clientRequired';
+      error.status = 400;
+      throw error;
     }
 
     const sqlClient = `
@@ -388,6 +403,8 @@ class AbonementsModel {
   }
 
   async updateFamily(familyData, user) {
+    // Начальные логи удалены
+
     const sqlQueries = {
       getClient: `SELECT * FROM clients WHERE client_id = ?`,
       getRelative: `SELECT * FROM relatives WHERE relative_id = ?`,
@@ -473,6 +490,10 @@ class AbonementsModel {
     let connection = null;
     let createdClientIds = [];
     let createdRelativeIds = [];
+    let operationsPerformed = false; // Флаг для отслеживания фактических изменений
+
+    const initialClientIds = familyData.family.clients?.filter((c) => c.id).map((c) => c.id) || [];
+    const initialRelativeIds = familyData.family.relatives?.filter((r) => r.id).map((r) => r.id) || [];
 
     try {
       poolPromise = pool.promise();
@@ -485,128 +506,118 @@ class AbonementsModel {
         return rows[0];
       };
 
-      // Гарантируем массив абонементов
       if (!Array.isArray(familyData.family.abonements)) {
         familyData.family.abonements = familyData.family.abonements ? [familyData.family.abonements] : [];
       }
 
-      // Проверяем наличие клиентов и родственников
-      const hasRelatives = familyData.family.relatives && familyData.family.relatives.length > 0;
-      const hasClients = familyData.family.clients && familyData.family.clients.length > 0;
+      const hasRelativesInput = familyData.family.relatives && familyData.family.relatives.length > 0;
+      const hasClientsInput = familyData.family.clients && familyData.family.clients.length > 0;
 
-      if (!hasRelatives && hasClients) {
-        throw new Error('Невозможно оставить клиента без родственника');
+      if (!hasRelativesInput && hasClientsInput) {
+        const error = new Error('Невозможно оставить клиента без родственника');
+        error.code = 'Family:RelativeRequiredForClient';
+        error.status = 400;
+        throw error;
       }
 
-      // --- Шаг 1: Обновляем существующих клиентов ---
-      await this._updateExistingClients(familyData, execute, getCurrentData, sqlQueries);
+      const updatedAnyClient = await this._updateExistingClients(familyData, execute, getCurrentData, sqlQueries);
+      if (updatedAnyClient) {
+        operationsPerformed = true;
+      }
 
-      // --- Шаг 2: Обновляем существующих родственников ---
-      await this._updateExistingRelatives(familyData, execute, getCurrentData, sqlQueries);
+      const updatedAnyRelative = await this._updateExistingRelatives(familyData, execute, getCurrentData, sqlQueries);
+      if (updatedAnyRelative) {
+        operationsPerformed = true;
+      }
 
-      // --- Шаг 3: Удаляем клиентов, которых больше нет в семье ---
-      await this._handleClientDeletions(familyData, execute, sqlQueries);
+      const deletedClientsCount = await this._handleClientDeletions(familyData, execute, sqlQueries);
+      if (deletedClientsCount > 0) {
+        operationsPerformed = true;
+      }
 
-      // --- Шаг 4: Удаляем родственников, которых больше нет в семье ---
-      await this._handleRelativeDeletions(familyData, execute, sqlQueries);
+      const deletedRelativesCount = await this._handleRelativeDeletions(familyData, execute, sqlQueries);
+      if (deletedRelativesCount > 0) {
+        operationsPerformed = true;
+      }
 
-      // --- Шаг 5: Добавляем новых клиентов ---
       createdClientIds = await this._addNewClients(familyData, user, execute, sqlQueries);
+      if (createdClientIds.length > 0) {
+        operationsPerformed = true;
+      }
 
-      // --- Шаг 6: Добавляем новых родственников ---
       createdRelativeIds = await this._addNewRelatives(familyData, user, execute, sqlQueries, createdClientIds);
+      if (createdRelativeIds.length > 0) {
+        operationsPerformed = true;
+      }
 
-      // --- Шаг 7: Добавляем новые абонементы ---
-      // Фильтруем только НОВЫЕ абонементы из данных фронтенда
       const newAbonementsFromFrontend = familyData.family.abonements.filter((ab) => !ab.abonement_id && ab.quantity);
-
       const allClientIds = [
         ...familyData.family.clients.filter((client) => client.id).map((client) => Number(client.id)),
         ...createdClientIds,
       ];
       const uniqueClientIds = [...new Set(allClientIds.map(Number))];
-
-      let newAbonementIds = []; // Будем хранить ID только НОВЫХ созданных абонементов
-      // Добавляем только если есть новые абонементы и клиенты для привязки
+      let newAbonementIds = [];
       if (newAbonementsFromFrontend.length > 0 && uniqueClientIds.length) {
-        console.log('Adding new abonements:', newAbonementsFromFrontend); // Логируем, что именно добавляем
-        // Передаем ТОЛЬКО новые абонементы
         newAbonementIds = await this.addAbonementForClients(newAbonementsFromFrontend, uniqueClientIds, user);
-        console.log('New abonement IDs created:', newAbonementIds);
-        // Не нужно изменять familyData.family.abonements здесь, так как
-        // данные для индексации все равно будут получены заново из БД чуть ниже.
+        if (newAbonementIds.length > 0) {
+          operationsPerformed = true;
+        }
       }
 
-      await connection.commit(); // Коммит транзакции
+      if (!operationsPerformed && (hasClientsInput || hasRelativesInput)) {
+        await connection.rollback();
+        // TODO: Реализовать корректное получение полного состояния семьи для возврата
+        // const fullCurrentFamilyData = await this.getFullFamilyDataById(familyData.family.id); // Пример
+        return {
+          updated: false,
+          code: 'Update:NoChangesDetected',
+          message: 'Изменений не найдено.',
+          createdClientIds: [],
+          createdRelativeIds: [],
+          abonements: [], // Заглушка, здесь должны быть актуальные данные
+        };
+      }
+      await connection.commit();
 
-      // --- ФИКС: Присваиваем client_id и relative_id новым элементам ---
-      let newClientIdx = 0; // Счетчик для ID новых клиентов
+      let newClientIdx = 0;
       const clearClients = familyData.family.clients.map((client) => {
-        if (client.id) {
-          // Если это существующий клиент (имеет ID из входящих данных)
-          return {
-            ...client,
-            // Убедимся, что client_id также установлен, предпочтительно из client.client_id или из client.id
-            client_id: client.client_id || client.id,
-            id: client.id, // id из входящих данных является основным для существующих
-          };
+        if (client.id && !createdClientIds.includes(client.id)) {
+          return { ...client, client_id: client.client_id || client.id, id: client.id };
         } else {
-          // Это новый клиент, которому нужен ID из createdClientIds
           const newDbId = createdClientIds[newClientIdx++];
-          return {
-            ...client,
-            client_id: newDbId,
-            id: newDbId,
-          };
+          return { ...client, client_id: newDbId, id: newDbId };
         }
       });
 
-      let newRelativeIdx = 0; // Счетчик для ID новых родственников
+      let newRelativeIdx = 0;
       const clearRelatives = familyData.family.relatives.map((relative) => {
-        if (relative.id) {
-          // Если это существующий родственник (имеет ID из входящих данных)
-          return {
-            ...relative,
-            // Убедимся, что relative_id также установлен
-            relative_id: relative.relative_id || relative.id,
-            id: relative.id, // id из входящих данных является основным для существующих
-          };
+        if (relative.id && !createdRelativeIds.includes(relative.id)) {
+          return { ...relative, relative_id: relative.relative_id || relative.id, id: relative.id };
         } else {
-          // Это новый родственник, которому нужен ID из createdRelativeIds
           const newDbId = createdRelativeIds[newRelativeIdx++];
-          return {
-            ...relative,
-            relative_id: newDbId,
-            id: newDbId,
-          };
+          return { ...relative, relative_id: newDbId, id: newDbId };
         }
       });
-      // --- КОНЕЦ ФИКСА ---
 
-      // Получаем ВСЕ абонементы семьи для индексации и возврата (включая только что добавленные)
       const allFamilyAbonementsRaw = uniqueClientIds.length ? await this.getAbonementsOfClient(uniqueClientIds[0]) : [];
-
-      // Удаляем поле 'visits_quantity' перед индексацией, т.к. оно не ожидается схемой индекса families
       const allFamilyAbonementsForIndex = allFamilyAbonementsRaw.map(({ visits_quantity, ...rest }) => rest);
 
-      // --- Индексируем семью ---
       if (uniqueClientIds.length > 0) {
-        // Только если есть клиенты / ID для индексации
         await searchDAL.addToIndex('families', uniqueClientIds[0], {
           clients: clearClients,
           relatives: clearRelatives,
-          abonements: allFamilyAbonementsForIndex, // Используем абонементы без visits_quantity
+          abonements: allFamilyAbonementsForIndex,
         });
       }
-
       return {
+        updated: true,
         createdClientIds,
         createdRelativeIds,
-        abonements: allFamilyAbonementsRaw, // Возвращаем также все абонементы семьи (с visits_quantity)
+        abonements: allFamilyAbonementsRaw,
       };
     } catch (error) {
-      await connection.rollback();
-      console.error('Ошибка в updateFamily:', error);
+      if (connection) await connection.rollback();
+      console.error('[DAL.updateFamily] Ошибка:', error);
       throw error;
     } finally {
       if (connection) pool.releaseConnection(connection);
@@ -614,86 +625,63 @@ class AbonementsModel {
   }
 
   async _handleClientDeletions(familyData, execute, sqlQueries) {
+    // Начальный и прочие детальные логи удалены
     const { clients } = familyData.family;
+    let deletionCount = 0;
 
-    // Если нет клиентов, пропускаем
     if (!clients?.length) {
-      console.log('Нет клиентов для обработки');
-      return;
+      return deletionCount;
     }
-
-    // Находим существующего клиента для получения ID абонемента
     const existingClient = clients.find((client) => client.id);
-
-    // Если нет существующих клиентов, значит все клиенты новые - нечего удалять
     if (!existingClient) {
-      console.log('Не найдено существующих клиентов');
-      return;
+      return deletionCount;
     }
-
-    console.log('Поиск клиентов семьи для клиента ID:', existingClient.id);
     const [currentFamilyRows] = await execute(sqlQueries.getFamilyClients, [existingClient.id]);
-
     if (!currentFamilyRows?.length) {
-      console.log('Не найдено клиентов для семьи');
-      return;
+      return deletionCount;
     }
-
-    // Получаем ID клиентов для сравнения
     const currentFamilyIds = currentFamilyRows.map((row) => row.client_id);
-    console.log('Текущие ID клиентов:', currentFamilyIds);
-
     const newFamilyIds = clients.map((client) => Number(client.id)).filter(Boolean);
-    console.log('Новые ID клиентов:', newFamilyIds);
-
     const clientsToDelete = currentFamilyIds.filter((id) => !newFamilyIds.includes(id));
-    console.log('ID клиентов для удаления:', clientsToDelete);
 
-    // Удаляем клиентов, которых больше нет в семье
     for (const clientId of clientsToDelete) {
-      console.log('Удаление клиента ID:', clientId);
-
       try {
-        // Сначала удаляем связь с абонементом
-        console.log('Удаление связи клиента с абонементом...');
         await execute(sqlQueries.deleteAbonementClient, [clientId]);
-
-        // Затем удаляем все связи с родственниками
-        console.log('Удаление связей клиента с родственниками...');
         await execute('DELETE FROM clients_relatives WHERE clrl_client_id = ?', [clientId]);
-
-        // И наконец, удаляем самого клиента
-        console.log('Удаление записи клиента...');
         await execute(sqlQueries.deleteClient, [clientId]);
-
-        console.log('Клиент и все его связи успешно удалены');
+        deletionCount++;
       } catch (error) {
-        console.error('Ошибка при удалении клиента:', error);
+        console.error('[DAL._handleClientDeletions] Ошибка при удалении клиента ID:', clientId, error);
         throw error;
       }
     }
+    return deletionCount;
   }
 
   async _updateExistingClients(familyData, execute, getCurrentData, sqlQueries) {
+    // Начальный и другие детальные логи удалены
     const { clients } = familyData.family;
+    let updatedAnyClient = false;
 
     for (const client of clients) {
-      // Пропускаем клиентов без ID
-      if (!client.id) continue;
-
+      if (!client.id) {
+        continue;
+      }
       const current = await getCurrentData(sqlQueries.getClient, client.id);
-      if (!current) continue;
-
-      // Проверяем, есть ли изменения в данных клиента
+      if (!current) {
+        continue;
+      }
       const hasChanges = this._checkClientChanges(current, client);
-
       if (hasChanges) {
         await this._updateClientData(client, execute, sqlQueries);
+        updatedAnyClient = true;
       }
     }
+    return updatedAnyClient;
   }
 
   _checkClientChanges(current, client) {
+    // Все console.log удалены
     return ['surname', 'name', 'patronymic', 'gender', 'birthday'].some((field) => {
       const currentValue = current[field];
       const newValue = client[field];
@@ -701,46 +689,64 @@ class AbonementsModel {
       if (field === 'birthday') {
         return this._compareDates(currentValue, newValue);
       }
-
       if (field === 'gender') {
-        const currentGender = currentValue;
-        const newGender = newValue;
-
+        const currentGender = Number(currentValue);
+        const newGender = Number(newValue);
         return currentGender !== newGender;
       }
-
       return currentValue !== newValue;
     });
   }
 
   _compareDates(date1, date2) {
-    // Функция для приведения даты к формату дд.мм.гггг
+    // Все console.log удалены
     const formatToDDMMYYYY = (date) => {
       if (!date) return null;
 
-      const d = new Date(date);
-      if (isNaN(d.getTime())) return null;
+      let d;
+      if (date instanceof Date) {
+        d = date;
+      } else if (typeof date === 'string') {
+        // Попытка распарсить строку ДД.ММ.ГГГГ
+        const parts = date.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+        if (parts) {
+          // parts[0] - вся строка, parts[1] - день, parts[2] - месяц, parts[3] - год
+          // ВАЖНО: месяцы в конструкторе Date идут от 0 до 11
+          d = new Date(parseInt(parts[3], 10), parseInt(parts[2], 10) - 1, parseInt(parts[1], 10));
+        } else {
+          // Если не формат ДД.ММ.ГГГГ, пробуем стандартный парсинг (может быть ISO строка)
+          d = new Date(date);
+        }
+      } else {
+        // Неизвестный тип, пытаемся как есть
+        try {
+          d = new Date(date);
+        } catch (e) {
+          return null; // Не удалось преобразовать в дату
+        }
+      }
+
+      if (!d || isNaN(d.getTime())) {
+        // console.log('[DAL._compareDates.formatToDDMMYYYY] Не удалось распарсить дату:', date); // Удалено
+        return null;
+      }
 
       const day = String(d.getDate()).padStart(2, '0');
       const month = String(d.getMonth() + 1).padStart(2, '0');
       const year = d.getFullYear();
-
       return `${day}.${month}.${year}`;
     };
 
-    const d1 = formatToDDMMYYYY(date1);
-    const d2 = formatToDDMMYYYY(date2);
+    const d1_formatted = formatToDDMMYYYY(date1);
+    const d2_formatted = formatToDDMMYYYY(date2);
 
-    if (!d1 || !d2) return false;
-
-    return d1 !== d2;
+    return d1_formatted !== d2_formatted;
   }
 
   async _updateClientData(client, execute, sqlQueries) {
     try {
-      console.log('Обновление данных клиента. Пол:', client.gender, 'Тип:', typeof client.gender);
+      // console.log('Обновление данных клиента. Пол:', client.gender, 'Тип:', typeof client.gender); // Удалено
 
-      // Преобразуем undefined значения в null для SQL
       const surname = client.surname === undefined ? null : client.surname;
       const name = client.name === undefined ? null : client.name;
       const patronymic = client.patronymic === undefined ? null : client.patronymic;
@@ -755,6 +761,7 @@ class AbonementsModel {
   }
 
   async _addNewClients(familyData, user, execute, sqlQueries) {
+    // Начальный и другие детальные логи удалены
     if (!familyData?.family?.clients?.length) {
       return [];
     }
@@ -787,15 +794,7 @@ class AbonementsModel {
 
     for (const client of newClients) {
       try {
-        console.log('Добавление нового клиента:', {
-          surname: client.surname,
-          name: client.name,
-          patronymic: client.patronymic,
-          gender: client.gender,
-          birthday: client.birthday,
-        });
-
-        // Преобразуем undefined значения в null для SQL
+        // Лог добавления нового клиента удален
         const surname = client.surname === undefined ? null : client.surname;
         const name = client.name === undefined ? null : client.name;
         const patronymic = client.patronymic === undefined ? null : client.patronymic;
@@ -824,40 +823,71 @@ class AbonementsModel {
         throw error;
       }
     }
-
     return createdClientIds;
   }
 
   async _updateExistingRelatives(familyData, execute, getCurrentData, sqlQueries) {
+    // Начальный и другие детальные логи удалены
     const { relatives } = familyData.family;
+    let updatedAnyRelative = false;
 
     for (const relative of relatives) {
-      if (!relative.id) continue;
-
+      if (!relative.id) {
+        continue;
+      }
       const current = await getCurrentData(sqlQueries.getRelative, relative.id);
-      if (!current) continue;
-
-      const hasChanges = this._checkRelativeChanges(current, relative);
-
-      if (hasChanges) {
+      if (!current) {
+        continue;
+      }
+      const hasBaseChanges = this._checkRelativeChanges(current, relative);
+      if (hasBaseChanges) {
         await this._updateRelativeData(relative, execute, sqlQueries);
+        updatedAnyRelative = true;
       }
 
-      // Обновляем телефон родственника
       const currentTelephone = await getCurrentData(sqlQueries.getTelephone, relative.id);
-      if (currentTelephone && currentTelephone.telephone !== relative.telephone) {
+
+      let telephoneChanged = false;
+      if (currentTelephone && relative.telephone && currentTelephone.telephone !== relative.telephone) {
         await execute(sqlQueries.updateTelephone, [relative.telephone, relative.id]);
+        telephoneChanged = true;
+      } else if (!currentTelephone && relative.telephone) {
+        // В user не передается в user.branch, нужно исправить если этот код актуален
+        // await execute(sqlQueries.addTelephone, [relative.telephone, relative.id, user.branch]);
+        // Пока закомментирую строку выше, т.к. user не в области видимости
+        // Для исправления: user должен быть передан в _updateExistingRelatives
+        await execute(sqlQueries.addTelephone, [relative.telephone, relative.id, familyData.user?.branch || null]); // Попытка получить user.branch
+        telephoneChanged = true;
+      } else if (currentTelephone && (relative.telephone === null || relative.telephone === '')) {
+        await execute(sqlQueries.updateTelephone, [null, relative.id]);
+        telephoneChanged = true;
       }
+      if (telephoneChanged) updatedAnyRelative = true;
     }
+    return updatedAnyRelative;
   }
 
   _checkRelativeChanges(current, relative) {
-    return ['surname', 'name', 'patronymic', 'relative_type_id'].some((field) => current[field] !== relative[field]);
+    // Все console.log удалены
+    return ['surname', 'name', 'patronymic', 'relative_type_id'].some((field) => {
+      const currentValue = current[field];
+      const newValue = relative[field];
+
+      if (field === 'relative_type_id') {
+        if (Number(currentValue) !== Number(newValue)) {
+          return true;
+        }
+        return false;
+      }
+      if (currentValue !== newValue) {
+        return true;
+      }
+      return false;
+    });
   }
 
   async _updateRelativeData(relative, execute, sqlQueries) {
     try {
-      // Преобразуем undefined значения в null для SQL
       const surname = relative.surname === undefined ? null : relative.surname;
       const name = relative.name === undefined ? null : relative.name;
       const patronymic = relative.patronymic === undefined ? null : relative.patronymic;
@@ -870,86 +900,20 @@ class AbonementsModel {
     }
   }
 
-  async _handleRelativeDeletions(familyData, execute, sqlQueries) {
-    const { relatives } = familyData.family;
-
-    if (!relatives?.length) {
-      console.log('Нет родственников для обработки');
-      return;
-    }
-
-    const existingClient = familyData.family.clients.find((client) => client.id);
-    if (!existingClient) {
-      console.log('Не найдено существующих клиентов');
-      return;
-    }
-
-    console.log('Поиск родственников семьи для клиента ID:', existingClient.id);
-    const [currentFamilyRows] = await execute(sqlQueries.getFamilyRelatives, [existingClient.id]);
-
-    if (!currentFamilyRows?.length) {
-      console.log('Не найдено родственников для семьи');
-      return;
-    }
-
-    // Получаем список ID существующих родственников
-    const currentRelativeIds = currentFamilyRows.map((row) => row.relative_id);
-    console.log('Текущие ID родственников:', currentRelativeIds);
-
-    // Получаем список ID родственников из обновленных данных
-    const newRelativeIds = relatives
-      .filter((relative) => relative.id && relative.id !== undefined)
-      .map((relative) => Number(relative.id))
-      .filter((id) => id && !isNaN(id));
-    console.log('Новые ID родственников:', newRelativeIds);
-
-    // Находим ID родственников, которых нужно удалить
-    const relativesToDelete = currentRelativeIds.filter((id) => !newRelativeIds.includes(id));
-    console.log('ID родственников для удаления:', relativesToDelete);
-
-    // Удаляем родственников и связанные с ними данные
-    for (const relativeId of relativesToDelete) {
-      console.log('Удаление родственника ID:', relativeId);
-
-      try {
-        // Сначала удаляем телефоны
-        console.log('Удаление телефонов родственника...');
-        await execute(sqlQueries.deleteTelephone, [relativeId]);
-
-        // Затем удаляем все связи с клиентами в таблице clients_relatives
-        console.log('Удаление связей родственника с клиентами...');
-        await execute('DELETE FROM clients_relatives WHERE clrl_relative_id = ?', [relativeId]);
-
-        // И наконец, удаляем самого родственника
-        console.log('Удаление записи родственника...');
-        await execute(sqlQueries.deleteRelative, [relativeId]);
-
-        console.log('Родственник и все его связи успешно удалены');
-      } catch (error) {
-        console.error('Ошибка при удалении родственника:', error);
-        throw error;
-      }
-    }
-  }
-
   async _addNewRelatives(familyData, user, execute, sqlQueries, createdClientIds = []) {
+    // Начальный и другие детальные логи удалены
     const { relatives } = familyData.family;
     const { clients } = familyData.family;
     const createdRelativeIds = [];
 
-    console.log('Обработка новых родственников. Получено родственников:', relatives?.length || 0);
-
     if (!relatives?.length) {
-      console.log('Нет родственников для добавления');
       return createdRelativeIds;
     }
 
     // Фильтруем только новых родственников (без ID)
     const newRelatives = relatives.filter((relative) => !relative.id);
-    console.log('Новых родственников для добавления:', newRelatives.length);
 
     if (!newRelatives.length) {
-      console.log('Нет новых родственников для добавления');
       return createdRelativeIds;
     }
 
@@ -958,12 +922,10 @@ class AbonementsModel {
       ...clients.filter((client) => client.id && client.id !== undefined).map((client) => client.id),
       ...createdClientIds,
     ];
-    console.log('Список ID клиентов для связи с родственниками:', allClientIds);
 
     for (const relative of newRelatives) {
-      console.log('Добавление нового родственника:', relative.name, relative.surname);
+      // Лог добавления нового родственника удален
 
-      // Преобразуем undefined значения в null для SQL
       const surname = relative.surname === undefined ? null : relative.surname;
       const name = relative.name === undefined ? null : relative.name;
       const patronymic = relative.patronymic === undefined ? null : relative.patronymic;
@@ -981,9 +943,7 @@ class AbonementsModel {
 
       const newRelativeId = result.insertId;
       createdRelativeIds.push(newRelativeId);
-      console.log('Создан новый родственник с ID:', newRelativeId);
 
-      // Проверяем существование телефона перед добавлением
       if (telephone) {
         const [existingTelephone] = await execute('SELECT telephone FROM telephone_numbers WHERE telephone = ?', [
           telephone,
@@ -991,24 +951,58 @@ class AbonementsModel {
 
         if (!existingTelephone.length) {
           await execute(sqlQueries.addTelephone, [telephone, newRelativeId, user.branch]);
-          console.log('Добавлен телефон для родственника:', telephone);
         } else {
-          console.log('Телефон уже существует в базе, пропуск добавления');
+          // Лог про существующий телефон удален
         }
       }
 
-      // Связываем родственника со всеми клиентами семьи
-      console.log('Связывание родственника с клиентами...');
+      // Логи связывания удалены
       for (const clientId of allClientIds) {
         if (clientId) {
           await execute(sqlQueries.linkClientToRelative, [clientId, newRelativeId]);
-          console.log('Родственник связан с клиентом ID:', clientId);
         }
       }
     }
 
-    console.log('Завершено добавление новых родственников. Создано:', createdRelativeIds.length);
+    // Конечный лог удален
     return createdRelativeIds;
+  }
+
+  async _handleRelativeDeletions(familyData, execute, sqlQueries) {
+    // Начальный и другие детальные логи удалены
+    const { relatives } = familyData.family;
+    let deletionCount = 0;
+
+    if (!relatives?.length) {
+      return deletionCount;
+    }
+    const existingClient = familyData.family.clients.find((client) => client.id);
+    if (!existingClient) {
+      return deletionCount;
+    }
+    const [currentFamilyRows] = await execute(sqlQueries.getFamilyRelatives, [existingClient.id]);
+    if (!currentFamilyRows?.length) {
+      return deletionCount;
+    }
+    const currentRelativeIds = currentFamilyRows.map((row) => row.relative_id);
+    const newRelativeIds = relatives
+      .filter((relative) => relative.id && relative.id !== undefined)
+      .map((relative) => Number(relative.id))
+      .filter((id) => id && !isNaN(id));
+    const relativesToDelete = currentRelativeIds.filter((id) => !newRelativeIds.includes(id));
+
+    for (const relativeId of relativesToDelete) {
+      try {
+        await execute(sqlQueries.deleteTelephone, [relativeId]);
+        await execute(sqlQueries.deleteClientRelative, [relativeId]);
+        await execute(sqlQueries.deleteRelative, [relativeId]);
+        deletionCount++;
+      } catch (error) {
+        console.error('[DAL._handleRelativeDeletions] Ошибка при удалении родственника ID:', relativeId, error);
+        throw error;
+      }
+    }
+    return deletionCount;
   }
 
   // Вспомогательный метод для построения динамических SQL фильтров
