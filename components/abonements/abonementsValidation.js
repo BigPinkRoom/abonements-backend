@@ -10,6 +10,8 @@ class AbonementValidation {
         const params = {
           filters: req.body.params.filters || {},
           sortings: req.body.params.sortings || [],
+          limit: req.body.params.limit || 50,
+          offset: req.body.params.offset || 0,
         };
 
         if (req.body.abonement) {
@@ -101,6 +103,8 @@ class AbonementValidation {
           type: Joi.string().valid(...abonementsConstants.ABONEMENTS_FULL_SORT_TYPES),
         })
       ),
+      limit: Joi.number().min(1).max(100),
+      offset: Joi.number().min(0).max(1000),
       id: Joi.string().min(1).max(6).regex(/^\d+$/), // TODO
     });
 

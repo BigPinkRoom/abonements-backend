@@ -55,14 +55,13 @@ class AbonementsModel {
     }
   }
 
-  async getAbonementsWithClients({ filters = {}, sortings = [] }) {
+  async getAbonementsWithClients({ filters = {}, sortings = [], limit, offset }) {
     const params = [];
 
     const sqlSorting = helpersDAL.createSortingString(sortings) || '';
     const sqlFilter = helpersDAL.createFilteringString(filters, 'abonements.date_create') || '';
 
-    console.log('sqlFilter', sqlFilter);
-    console.log('sqlSorting', sqlSorting);
+    const sqlPagination = limit ? `LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset) || 0}` : '';
 
     const sql = `SELECT abonements.*, clients.client_id AS client_id, clients.name AS client_name, clients.surname AS client_surname, clients.patronymic AS client_patronymic, clients.birthday AS client_birthday, clients.gender AS client_gender, mydb.abonement_statuses.name AS status_type,
     relatives.relative_id,
@@ -78,9 +77,7 @@ class AbonementsModel {
     LEFT JOIN mydb.clients_relatives ON mydb.clients_relatives.clrl_client_id = mydb.clients.client_id
     LEFT JOIN mydb.relatives ON mydb.relatives.relative_id = mydb.clients_relatives.clrl_relative_id
     LEFT JOIN mydb.telephone_numbers ON mydb.telephone_numbers.relative_id = mydb.relatives.relative_id
-    ${sqlFilter} ${sqlSorting};`;
-
-    console.log('Executing SQL:', sql);
+    ${sqlFilter} ${sqlSorting} ${sqlPagination};`;
 
     let poolPromise = null;
 
@@ -492,8 +489,8 @@ class AbonementsModel {
     let createdRelativeIds = [];
     let operationsPerformed = false; // Флаг для отслеживания фактических изменений
 
-    const initialClientIds = familyData.family.clients?.filter((c) => c.id).map((c) => c.id) || [];
-    const initialRelativeIds = familyData.family.relatives?.filter((r) => r.id).map((r) => r.id) || [];
+    // const initialClientIds = familyData.family.clients?.filter((c) => c.id).map((c) => c.id) || [];
+    // const initialRelativeIds = familyData.family.relatives?.filter((r) => r.id).map((r) => r.id) || [];
 
     try {
       poolPromise = pool.promise();
@@ -564,19 +561,21 @@ class AbonementsModel {
         }
       }
 
+      // Если изменения не обнаружены, возвращаем специальный объект
       if (!operationsPerformed && (hasClientsInput || hasRelativesInput)) {
-        await connection.rollback();
-        // TODO: Реализовать корректное получение полного состояния семьи для возврата
-        // const fullCurrentFamilyData = await this.getFullFamilyDataById(familyData.family.id); // Пример
+        console.log('[DAL.updateFamily] NoChangesDetected. Формируем ответ об отсутствии изменений.');
         return {
           updated: false,
           code: 'Update:NoChangesDetected',
-          message: 'Изменений не найдено.',
-          createdClientIds: [],
-          createdRelativeIds: [],
-          abonements: [], // Заглушка, здесь должны быть актуальные данные
+          message: 'Изменений не найдено. Данные семьи не были изменены.',
+          // В этом случае мы не возвращаем поля clients, relatives, abonements и т.д. из DAL.
+          // Контроллер получит этот объект и сформирует свой ответ для клиента.
         };
       }
+
+      // Если изменения есть, продолжаем с транзакцией и обработкой данных...
+      console.log('[DAL.updateFamily] Изменения обнаружены или не удалось определить. Продолжаем с обновлением.');
+
       await connection.commit();
 
       let newClientIdx = 0;
@@ -611,6 +610,7 @@ class AbonementsModel {
       }
       return {
         updated: true,
+        code: 'Update:FamilyUpdatedSuccess',
         createdClientIds,
         createdRelativeIds,
         abonements: allFamilyAbonementsRaw,

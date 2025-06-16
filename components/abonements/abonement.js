@@ -23,10 +23,11 @@ class Abonement {
     }
 
     if (params) {
-      console.log('params', params);
       this.params = {
         sortings: [],
         filters: {},
+        limit: params.limit || 50,
+        offset: params.offset || 0,
       };
 
       if (params.sortings && Array.isArray(params.sortings)) {
